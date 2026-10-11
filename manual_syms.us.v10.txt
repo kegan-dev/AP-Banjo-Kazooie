@@ -15,3 +15,11 @@ boot_gChecksumsCore1 = gChecksumsCore1;
 boot_gOverlayTable = gOverlayTable;
 boot_core1_main = core1_main;
 
+
+/* BKBT (see BKBT.md). Nothing below moves anything. */
+
+/* Header of the Banjo-Kazooie payload that the dual-boot launcher loads into Expansion Pak RAM before it
+   starts the game: 'BKPL' at +0, the address of the per-frame handler at +4. mainLoop
+   (src/core1/code_0.c) calls the handler when the magic is there. The address belongs to the payload's
+   build (BK_PAYLOAD_RAM in the BKBT repository, hack/bk/asm/payload.asm). */
+bkbt_payload = 0x80500000;

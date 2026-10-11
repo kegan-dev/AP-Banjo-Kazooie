@@ -174,6 +174,16 @@ void globalTimer_decTimer(void) {
     gGlobalTimer--;
 }
 
+#if BKBT
+/* Frame hook: mainLoop calls the handler of the Banjo-Kazooie payload once per iteration, before the game
+ * update. The payload is not part of this ROM. The dual-boot launcher loads it into Expansion Pak RAM;
+ * bkbt_payload (manual_syms.us.v10.txt) is its header: 'BKPL' at +0, the handler's address at +4. The
+ * handler is read from the header at run time, so this ROM does not depend on the payload's layout, and a
+ * ROM started without a payload finds no magic and skips the call. */
+#define BKBT_PAYLOAD_MAGIC 0x424B504C /* 'BKPL' */
+extern u32 bkbt_payload[];
+#endif
+
 void mainLoop(void) {
     s32 x, y;
     s32 r, g, b, a;
@@ -197,6 +207,11 @@ void mainLoop(void) {
 
     sDisableInput = FALSE;
 
+#if BKBT
+    if (bkbt_payload[0] == BKBT_PAYLOAD_MAGIC) {
+        ((void (*)(void)) bkbt_payload[1])();
+    }
+#endif
     baMotor_80250C08();
 
 #if ANTI_TAMPER
