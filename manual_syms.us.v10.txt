@@ -16,7 +16,7 @@ boot_gOverlayTable = gOverlayTable;
 boot_core1_main = core1_main;
 
 
-/* BKBT (see BKBT.md). Nothing below moves anything: one absolute symbol and assertions. */
+/* BKBT (see BKBT.md). Nothing below moves anything: two absolute symbols and assertions. */
 
 /* Header of the Banjo-Kazooie payload that the dual-boot launcher loads into Expansion Pak RAM before it
    starts the game: 'BKPL' at +0, the address of the per-frame handler at +4. mainLoop
@@ -62,3 +62,13 @@ ASSERT(lair_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: lair ends above 0x803A5C00:
 ASSERT(fight_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: fight ends above 0x803A5C00: core1 + core2 + fight have grown past the free RAM");
 ASSERT(CCW_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: CCW ends above 0x803A5C00: core1 + core2 + CCW have grown past the free RAM");
 ASSERT(emptyLvl_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: emptyLvl ends above 0x803A5C00: core1 + core2 + emptyLvl have grown past the free RAM");
+
+/* The entry stub (asm/entry.s, taken from the ROM, not built from source) clears the boot segment's bss
+   with a literal length. A new uninitialised global in src/boot would lie beyond it: never cleared on a
+   console, and an emulator, which starts with zeroed RAM, would not show it. Stop the link. */
+ASSERT(boot_bk_boot_BSS_SIZE == 0x4570, "BKBT: the boot segment's bss is no longer 0x4570 bytes, which is all the entry stub clears");
+
+/* The compressor splits core1 into its text and data files at core1_DATA_START_OFFSET, and the loader puts
+   the data at the next multiple of 16 after the text (src/core1/code_660.c, _rarezip_uncompress). The two
+   agree only while core1's text ends on a 16-byte boundary. Stop the link. */
+ASSERT(core1_DATA_START_OFFSET == core1_TEXT_END, "BKBT: core1's text does not end on a 16-byte boundary: the loader would put core1's data in the wrong place");
