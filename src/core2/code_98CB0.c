@@ -270,6 +270,7 @@ void volatileFlag_setN(enum volatile_flags_e start_index, s32 values, s32 count)
 }
 
 s32 volatileflag_func_8032056C(void) {
+#if ANTI_TAMPER
     s32 temp_a0;
     s32 temp_a1;
     s32 temp_a1_2;
@@ -295,15 +296,22 @@ s32 volatileflag_func_8032056C(void) {
               (((temp_a0 >> 8) & 7) + ((temp_a1 << 0xA) & 0xFF800)) |
               ((((u32) (temp_a0 & 0xF0000000) >> 0x15) + (temp_a1 & 0xE0000000)) ^ ((s32) ((temp_a0 / 0x40) & 0xF000) >> 9));
     return volatileflag_func_80320250() == *(s32*)temp_a1;
+#else
+    return TRUE;
+#endif
 }
 
 s32 volatileflag_func_80320708(void) {
+#if ANTI_TAMPER
     u16 temp_t6;
     s32 addr;
 
     temp_t6 = ((s32) &gVolatileFlags.unk4 >> 0x10);
     addr = (s32) &gVolatileFlags.unk4 ^ temp_t6;
     return volatileflag_func_80320320() == *(s32*)(addr ^ temp_t6);
+#else
+    return TRUE;
+#endif
 }
 
 void volatileFlag_backupAll(void) {

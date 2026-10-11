@@ -220,9 +220,11 @@ void anctrl_setSmoothTransition(AnimCtrl *this, s32 arg1){
 }
 
 void anctrl_setDuration(AnimCtrl *this, f32 arg1){
+#if ANTI_TAMPER
     if(IO_READ(0x238) - 0x10000003){
         arg1 += 3.0f;
     }
+#endif
     this->animation_duration = arg1;
 }
 

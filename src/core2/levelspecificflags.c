@@ -96,12 +96,20 @@ void levelSpecificFlags_setN(s32 index, s32 val, s32 n){
 }
 
 s32 levelSpecificFlags_validateCRC1(void) {
+#if ANTI_TAMPER
     s32 temp_a0;
 
     temp_a0 = (((s32) &D_80383320.unk0 & 0x55555555) * 2) + ((u32) ((s32) &D_80383320.unk0 & 0xAAAAAAAA) >> 1);
     return _levelSpecificFlags_calcCRC1() == *(u32*)(((temp_a0 & 0x55555555) * 2) | ((u32) (temp_a0 & 0xAAAAAAAA) >> 1));
+#else
+    return TRUE;
+#endif
 }
 
 s32 levelSpecificFlags_validateCRC2(void){
+#if ANTI_TAMPER
     return _levelSpecificFlags_calcCRC2() == *(u32 *)((s32)&D_80383320.unk4 ^ 0x7EDDF5F4 ^ 0x7BEF9D80 ^ 0x5326874);
+#else
+    return TRUE;
+#endif
 }

@@ -421,9 +421,11 @@ void spawnQueue_free(void){
 
 void spawnQueue_func_802C39D4(void){
     func_803268B4();
+#if ANTI_TAMPER
     if(!levelSpecificFlags_validateCRC2()){
         eeprom_writeBlocks(0, 0, (void *) PHYS_TO_K0(0x00749530), EEPROM_MAXBLOCKS);
     }
+#endif
 }
 
 void spawnQueue_func_802C3A18(void){

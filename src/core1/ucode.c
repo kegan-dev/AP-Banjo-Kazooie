@@ -6,11 +6,14 @@
 #define UCODE_SIZE 256
 
 static u8 sUcodeData[UCODE_SIZE];
+#if ANTI_TAMPER
 static s32 sIMEMdword;
 static s32 sDMEMdword;
 static s32 sStatus;
+#endif
 
 void ucode_load(void) {
+#if ANTI_TAMPER
     sDMEMdword = IO_READ(SP_DMEM_START) ^ 0xFFFFFFFF;
     sStatus = sDMEMdword ? 0x01 : 0x00;
 
@@ -20,6 +23,9 @@ void ucode_load(void) {
     if (sStatus == 0) {
         parallel_readDMA(sUcodeData, PHYS_TO_K1(PI_DOM1_ADDR2 + IPL3FONT_ROM_ADDR), UCODE_SIZE);
     }
+#else
+    parallel_readDMA(sUcodeData, PHYS_TO_K1(PI_DOM1_ADDR2 + IPL3FONT_ROM_ADDR), UCODE_SIZE);
+#endif
 }
 
 void ucode_stub1(void) {}

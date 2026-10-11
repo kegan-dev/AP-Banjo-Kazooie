@@ -427,9 +427,11 @@ void gWorldExitPad_update(Actor *this) {
     f32 player_position[3];
     s32 phi_v0;
 
+#if ANTI_TAMPER
     if ((*(s32*)OS_PHYSICAL_TO_K1(0x22C) - 0x12600004)) {
         return;
     }
+#endif
 
     if (!this->volatile_initialized) {
 
