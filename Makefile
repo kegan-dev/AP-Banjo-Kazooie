@@ -351,12 +351,18 @@ $(BOOT_C_OBJS) : $(BUILD_DIR)/%.c.o : %.c | $(C_BUILD_DIRS)
 
 # Every C object depends on the switches it was compiled with. make cannot see a changed -D, so the
 # switches are in the name of a stamp file: with other switches the stamp is missing, gets made, and is
-# then newer than every object. (Below the compile rules, so that $< stays the source file.)
+# then newer than every object. The ROM and ELF of the other switches go at the same moment, so that an
+# interrupted rebuild does not leave them under the new stamp. (Below the compile rules, so that $< stays
+# the source file.)
 $(FLAGS_STAMP): | $(BUILD_DIR)
-	@$(RM) -f $(BUILD_DIR)/flags.*.stamp
+	@$(RM) -f $(BUILD_DIR)/flags.*.stamp $(FINAL_Z64) $(UNCOMPRESSED_Z64) $(ELF)
 	@touch $@
 
-$(C_OBJS) $(GLOBAL_ASM_C_OBJS): $(FLAGS_STAMP)
+# Upstream tracks no header dependencies: an edited struct would leave objects with two ideas of it.
+# Coarse but safe: every C object depends on every header.
+HEADERS := $(shell find include $(SRC_ROOT) lib/ultralib/include lib/ultralib/src -type f -name '*.h' 2> /dev/null)
+
+$(C_OBJS) $(GLOBAL_ASM_C_OBJS): $(FLAGS_STAMP) $(HEADERS)
 
 # Split baserom
 $(BUILD_DIR)/SPLAT_TIMESTAMP: decompressed.$(VERSION).yaml $(SYMBOL_ADDRS) $(DECOMPRESSED_BASEROM) | $(BUILD_DIR)
@@ -432,13 +438,15 @@ $(UNCOMPRESSED_Z64) : $(ELF)
 
 # .z64 (uncompressed) + .elf -> .z64 (final)
 # bk_rom_compress does not truncate its output, and when the compressed overlays do not fit it stops half
-# way and leaves a file that the next make would take for a finished ROM. So: start without one, and keep
-# the result only if the tool succeeded and the ROM has the cartridge's size.
+# way and leaves a file that the next make would take for a finished ROM. So the tool writes under
+# another name, and the ROM gets its own name only when the tool succeeded and the file has the
+# cartridge's size. A build that is killed in between leaves no ROM either.
 $(FINAL_Z64) : $(UNCOMPRESSED_Z64) $(ELF) $(BK_ROM_COMPRESS)
-	@$(RM) -f $@
-	@$(BK_ROM_COMPRESS) $(ELF) $(UNCOMPRESSED_Z64) $@ || { $(RM) -f $@; exit 1; }
-	@test "$$(stat -c %s $@)" = "$(ROM_SIZE)" || \
-	{ $(PRINT) "$(RED)$@ is $$(stat -c %s $@) bytes, not $(ROM_SIZE): the ROM is too big$(NO_COL)\n"; $(RM) -f $@; exit 1; }
+	@$(RM) -f $@ $@.tmp
+	@$(BK_ROM_COMPRESS) $(ELF) $(UNCOMPRESSED_Z64) $@.tmp || { $(RM) -f $@.tmp; exit 1; }
+	@test -f $@.tmp && test "$$(stat -c %s $@.tmp)" = "$(ROM_SIZE)" || \
+	{ $(PRINT) "$(RED)$@: bk_rom_compress wrote $$(stat -c %s $@.tmp 2> /dev/null || echo no) bytes, not $(ROM_SIZE) (too much compressed data?)$(NO_COL)\n"; $(RM) -f $@.tmp; exit 1; }
+	@mv $@.tmp $@
 
 # Libultra files
 $(BUILD_DIR)/libultra_rom.a:
