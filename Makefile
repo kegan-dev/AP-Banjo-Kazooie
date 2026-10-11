@@ -171,6 +171,7 @@ PRELIM_Z64           := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).prelim.
 PRELIM_ELF           := $(PRELIM_Z64:.z64=.elf)
 UNCOMPRESSED_Z64     := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).uncompressed.z64)
 FINAL_Z64            := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).z64)
+ROM_SIZE             := 16777216
 # Names the switches the objects in $(BUILD_DIR) were compiled with (rule further down)
 FLAGS_STAMP          := $(BUILD_DIR)/flags.BKBT$(BKBT).AT$(ANTI_TAMPER).AP$(ANTI_PIRACY).stamp
 ELF                  := $(FINAL_Z64:.z64=.elf)
@@ -410,8 +411,14 @@ $(UNCOMPRESSED_Z64) : $(ELF)
 	@$(OBJCOPY) $< $@ -O binary $(OCOPYFLAGS)
 
 # .z64 (uncompressed) + .elf -> .z64 (final)
+# bk_rom_compress does not truncate its output, and when the compressed overlays do not fit it stops half
+# way and leaves a file that the next make would take for a finished ROM. So: start without one, and keep
+# the result only if the tool succeeded and the ROM has the cartridge's size.
 $(FINAL_Z64) : $(UNCOMPRESSED_Z64) $(ELF) $(BK_ROM_COMPRESS)
-	@$(BK_ROM_COMPRESS) $(ELF) $(UNCOMPRESSED_Z64) $@
+	@$(RM) -f $@
+	@$(BK_ROM_COMPRESS) $(ELF) $(UNCOMPRESSED_Z64) $@ || { $(RM) -f $@; exit 1; }
+	@test "$$(stat -c %s $@)" = "$(ROM_SIZE)" || \
+	{ $(PRINT) "$(RED)$@ is $$(stat -c %s $@) bytes, not $(ROM_SIZE): the ROM is too big$(NO_COL)\n"; $(RM) -f $@; exit 1; }
 
 # Libultra files
 $(BUILD_DIR)/libultra_rom.a:
