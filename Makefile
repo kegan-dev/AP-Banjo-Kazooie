@@ -4,15 +4,32 @@ VERSION  ?= us.v10
 # BKBT=1 builds the Archipelago hack instead of the matching ROM (BKBT.md). The hack moves code, and a
 # moved build with the anti-tamper checks compiled in sabotages itself, so the hack is built without them.
 BKBT ?= 0
+ifneq ($(BKBT),0)
+ifneq ($(BKBT),1)
+$(error BKBT must be 0 or 1)
+endif
+endif
 ifeq ($(BKBT),1)
+ifneq ($(VERSION),us.v10)
+$(error BKBT=1 exists for VERSION=us.v10 only)
+endif
 ANTI_TAMPER ?= 0
 ANTI_PIRACY ?= 0
-ifneq ($(ANTI_TAMPER)$(ANTI_PIRACY),00)
+ifneq ($(ANTI_TAMPER),0)
+$(error BKBT=1 needs ANTI_TAMPER=0 and ANTI_PIRACY=0)
+endif
+ifneq ($(ANTI_PIRACY),0)
 $(error BKBT=1 needs ANTI_TAMPER=0 and ANTI_PIRACY=0)
 endif
 else
 ANTI_TAMPER ?= 1
 ANTI_PIRACY ?= 1
+endif
+# With the default switches the ROM has to match: there a ROM that differs is an error, not a message.
+ifeq ($(BKBT)/$(ANTI_TAMPER)/$(ANTI_PIRACY),0/1/1)
+VERIFY_DIFFERS := exit 1
+else
+VERIFY_DIFFERS := true
 endif
 
 ifeq ($(VERSION),us.v10)
@@ -258,7 +275,7 @@ ifeq ($(VERSION), us.v10)
 verify: $(BASEROM) $(FINAL_Z64)
 	@$(DIFF) $(BASEROM) $(FINAL_Z64) > /dev/null && \
 	$(PRINT) "$(YELLOW)        _\n      _( )_\n     [     ]_\n      ) _   _)\n     [_( )_]\n$(BLUE)$(BASENAME).$(VERSION).z64$(NO_COL): $(GREEN)OK$(NO_COL)\n" || \
-	$(PRINT) "$(BLUE)$(BASEROM) $(RED)differs$(NO_COL)\n"
+	{ $(PRINT) "$(BLUE)$(BASEROM) $(RED)differs$(NO_COL)\n"; $(VERIFY_DIFFERS); }
 else
 verify: $(DECOMPRESSED_BASEROM) $(PRELIM_Z64)
 	@$(DIFF) $^ > /dev/null && \
