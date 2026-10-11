@@ -37,7 +37,7 @@ Struct_Core2_C9F00_1 D_803725C0[] = {
 void func_80351DE0(Struct6Bs *, Struct68s *);
 extern void chTumblar_init(void *, Struct68s *);
 extern void func_80387940(void *, Struct68s *);
-extern void GV_func_80387960(void *, Struct68s *);
+extern void CC_func_80387960(void *, Struct68s *);
 extern void func_80387980(void *, Struct68s *);
 extern void func_803879A0(void *, Struct68s *);
 extern void func_803879C0(void *, Struct68s *);
@@ -49,7 +49,7 @@ extern void func_80351FE0(void *, Struct68s *);
 void func_80351E60(Struct6Bs *, Struct68s *, f32);
 extern void chTumblar_update(void *, Struct68s *, f32);
 extern void func_8038B790(void *, Struct68s *, f32);
-extern void chZubbaDocile_update(void *, Struct68s *, f32);
+extern void CC_func_80387A40(void *, Struct68s *, f32);
 extern void func_80352114(void *, Struct68s *, f32);
 
 Struct_Core2_C9F00_0 D_803725F4[] = {
@@ -58,14 +58,14 @@ Struct_Core2_C9F00_0 D_803725F4[] = {
     {chTumblar_init, chTumblar_update},
     {         NULL,          NULL}, 
     {         NULL, func_8038B790}, 
-    {func_80387940, chZubbaDocile_update}, 
-    {GV_func_80387960, chZubbaDocile_update}, 
-    {func_80387980, chZubbaDocile_update}, 
-    {func_803879A0, chZubbaDocile_update}, 
-    {func_803879C0, chZubbaDocile_update}, 
-    {CC_func_803879E0, chZubbaDocile_update}, 
-    {CC_func_80387A00, chZubbaDocile_update}, 
-    {CC_func_80387A20, chZubbaDocile_update}, 
+    {func_80387940, CC_func_80387A40},
+    {CC_func_80387960, CC_func_80387A40},
+    {func_80387980, CC_func_80387A40},
+    {func_803879A0, CC_func_80387A40},
+    {func_803879C0, CC_func_80387A40},
+    {CC_func_803879E0, CC_func_80387A40},
+    {CC_func_80387A00, CC_func_80387A40},
+    {CC_func_80387A20, CC_func_80387A40},
     {func_80351FE0, func_80352114}
 };
 
