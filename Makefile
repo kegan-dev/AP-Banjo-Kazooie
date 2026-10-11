@@ -246,7 +246,7 @@ OPT_FLAGS      := -O2
 MIPSBIT        := -mips2
 ASFLAGS        := -EB -mtune=vr4300 -march=vr4300 -mabi=32 -I include
 GCC_ASFLAGS    := -c -x assembler-with-cpp -Wa,-Iinclude -mabi=32 -ffreestanding -mtune=vr4300 -march=vr4300 -mfix4300 -G 0 -O -mno-shared -fno-PIC -mno-abicalls
-LDFLAGS        := -T $(LD_SCRIPT) -Map $(ELF:.elf=.map) --no-check-sections --accept-unknown-input-arch -T manual_syms.$(VERSION).txt
+LDFLAGS        := -T $(LD_SCRIPT) --no-check-sections --accept-unknown-input-arch -T manual_syms.$(VERSION).txt
 BINOFLAGS      := -r -b binary
 
 ### Rules ###
@@ -404,9 +404,12 @@ $(DECOMPRESSED_BASEROM): $(BASEROM) $(BK_ROM_DECOMPRESS)
 	@$(BK_ROM_DECOMPRESS) $< $@
 	
 # .o -> .elf (dummy symbols)
-$(PRELIM_ELF): $(ALL_OBJS) $(LD_SCRIPT) $(ASSET_OBJS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a
+# The symbol files are inputs of the link like the script is: the assertions and addresses in
+# manual_syms have to take effect when they are edited. The prelim link writes its own map, so that the
+# final link's map still describes the last ROM when a later link fails.
+$(PRELIM_ELF): $(ALL_OBJS) $(LD_SCRIPT) manual_syms.$(VERSION).txt rzip_dummy_addrs.$(VERSION).txt $(ASSET_OBJS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a
 	$(call print1,Linking elf:,$@)
-	@$(LD) $(LDFLAGS) -T rzip_dummy_addrs.$(VERSION).txt $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a -o $@
+	@$(LD) $(LDFLAGS) -Map $(PRELIM_ELF:.elf=.map) -T rzip_dummy_addrs.$(VERSION).txt $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a -o $@
 
 # .elf -> .z64 (dummy symbols)
 $(PRELIM_Z64) : $(PRELIM_ELF)
@@ -418,9 +421,9 @@ $(COMPRESSED_SYMBOLS): $(PRELIM_ELF) $(PRELIM_Z64) $(BK_ROM_COMPRESS)
 	@$(BK_ROM_COMPRESS) --symbols $(PRELIM_ELF) $(PRELIM_Z64) $@
 
 # .o -> .elf (game)
-$(ELF): $(ALL_OBJS) $(LD_SCRIPT) $(ASSET_OBJS) $(COMPRESSED_SYMBOLS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a
+$(ELF): $(ALL_OBJS) $(LD_SCRIPT) manual_syms.$(VERSION).txt $(ASSET_OBJS) $(COMPRESSED_SYMBOLS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a
 	$(call print1,Linking elf:,$@)
-	@$(LD) $(LDFLAGS) -T $(COMPRESSED_SYMBOLS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a -o $@
+	@$(LD) $(LDFLAGS) -Map $(ELF:.elf=.map) -T $(COMPRESSED_SYMBOLS) $(BUILD_DIR)/libultra_rom.a $(BUILD_DIR)/libultra_rom_boot.a -o $@
 
 # .elf -> .z64 (uncompressed)
 $(UNCOMPRESSED_Z64) : $(ELF)
