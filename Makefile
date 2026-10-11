@@ -1,8 +1,19 @@
 ### Configuration ###
 BASENAME := banjo
 VERSION  ?= us.v10
+# BKBT=1 builds the Archipelago hack instead of the matching ROM (BKBT.md). The hack moves code, and a
+# moved build with the anti-tamper checks compiled in sabotages itself, so the hack is built without them.
+BKBT ?= 0
+ifeq ($(BKBT),1)
+ANTI_TAMPER ?= 0
+ANTI_PIRACY ?= 0
+ifneq ($(ANTI_TAMPER)$(ANTI_PIRACY),00)
+$(error BKBT=1 needs ANTI_TAMPER=0 and ANTI_PIRACY=0)
+endif
+else
 ANTI_TAMPER ?= 1
 ANTI_PIRACY ?= 1
+endif
 
 ifeq ($(VERSION),us.v10)
 	C_VERSION=0
@@ -160,6 +171,8 @@ PRELIM_Z64           := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).prelim.
 PRELIM_ELF           := $(PRELIM_Z64:.z64=.elf)
 UNCOMPRESSED_Z64     := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).uncompressed.z64)
 FINAL_Z64            := $(addprefix $(BUILD_DIR)/,$(BASENAME).$(VERSION).z64)
+# Names the switches the objects in $(BUILD_DIR) were compiled with (rule further down)
+FLAGS_STAMP          := $(BUILD_DIR)/flags.BKBT$(BKBT).AT$(ANTI_TAMPER).AP$(ANTI_PIRACY).stamp
 ELF                  := $(FINAL_Z64:.z64=.elf)
 LD_SCRIPT            := $(BASENAME).ld
 ASSET_BIN            := $(BUILD_DIR)/assets.bin
@@ -207,7 +220,7 @@ endef
 ### Flags ###
 
 # Build tool flags
-CFLAGS         := -c -Wab,-r4300_mul -non_shared -G 0 -Xcpluscomm $(OPT_FLAGS) $(MIPSBIT) -D_FINALROM -DF3DEX_GBI -DVERSION='$(C_VERSION)' -DNDEBUG -DBUILD_VERSION=VERSION_I -DBKDIFFS -DANTI_TAMPER='$(ANTI_TAMPER)' -DANTI_PIRACY='$(ANTI_PIRACY)'
+CFLAGS         := -c -Wab,-r4300_mul -non_shared -G 0 -Xcpluscomm $(OPT_FLAGS) $(MIPSBIT) -D_FINALROM -DF3DEX_GBI -DVERSION='$(C_VERSION)' -DNDEBUG -DBUILD_VERSION=VERSION_I -DBKDIFFS -DANTI_TAMPER='$(ANTI_TAMPER)' -DANTI_PIRACY='$(ANTI_PIRACY)' -DBKBT='$(BKBT)'
 CFLAGS         += -woff 649,654,838,807
 CPPFLAGS       := -D_FINALROM -DN_MICRO -DNDEBUG -DBUILD_VERSION=VERSION_I -DBKDIFFS
 INCLUDE_CFLAGS := -I . -I include -I lib/ultralib/include -I lib/ultralib/include/PR -I lib/ultralib/include/PRinternal -I lib/ultralib/include/compiler/ido -I include/n_audio/PR -I lib/ultralib/src/audio
@@ -220,8 +233,13 @@ BINOFLAGS      := -r -b binary
 
 ### Rules ###
 
-# Default target, all
+# Default target, all. The hack build has nothing to compare itself with.
+ifeq ($(BKBT),1)
+all: $(FINAL_Z64)
+	@$(PRINT) "$(BLUE)$(FINAL_Z64)$(NO_COL): $(GREEN)BKBT hack build$(NO_COL)\n"
+else
 all: verify
+endif
 
 # Shows progress for all overlays, boot, and total
 progress: $(OVERLAY_PROG_CSVS) $(MAIN_PROG_CSV) $(TOTAL_PROG_CSV) 
@@ -312,6 +330,15 @@ $(BOOT_C_OBJS) : $(BUILD_DIR)/%.c.o : %.c | $(C_BUILD_DIRS)
 	@$(CROSS)strip $@ -N asdasdasasdasd
 	@$(OBJCOPY) --prefix-symbols=boot_ $@
 	@$(OBJCOPY) --strip-unneeded $@
+
+# Every C object depends on the switches it was compiled with. make cannot see a changed -D, so the
+# switches are in the name of a stamp file: with other switches the stamp is missing, gets made, and is
+# then newer than every object. (Below the compile rules, so that $< stays the source file.)
+$(FLAGS_STAMP): | $(BUILD_DIR)
+	@$(RM) -f $(BUILD_DIR)/flags.*.stamp
+	@touch $@
+
+$(C_OBJS) $(GLOBAL_ASM_C_OBJS): $(FLAGS_STAMP)
 
 # Split baserom
 $(BUILD_DIR)/SPLAT_TIMESTAMP: decompressed.$(VERSION).yaml $(SYMBOL_ADDRS) $(DECOMPRESSED_BASEROM) | $(BUILD_DIR)
