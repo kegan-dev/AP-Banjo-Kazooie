@@ -16,10 +16,49 @@ boot_gOverlayTable = gOverlayTable;
 boot_core1_main = core1_main;
 
 
-/* BKBT (see BKBT.md). Nothing below moves anything. */
+/* BKBT (see BKBT.md). Nothing below moves anything: one absolute symbol and assertions. */
 
 /* Header of the Banjo-Kazooie payload that the dual-boot launcher loads into Expansion Pak RAM before it
    starts the game: 'BKPL' at +0, the address of the per-frame handler at +4. mainLoop
    (src/core1/code_0.c) calls the handler when the magic is there. The address belongs to the payload's
    build (BK_PAYLOAD_RAM in the BKBT repository, hack/bk/asm/payload.asm). */
 bkbt_payload = 0x80500000;
+
+/* overlay_load (src/core1/overlay.c) clears an overlay's bss and then writes four checksum words at its
+   start, where gChecksums<overlay> is. A file whose .bss is linked ahead of checksums.c.o puts its first
+   uninitialised global there instead: the loader overwrites it and nothing warns. Stop the link. */
+ASSERT(gChecksumsCore2 == core2_BSS_START, "BKBT: gChecksumsCore2 is not at core2_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsCC == CC_BSS_START, "BKBT: gChecksumsCC is not at CC_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsGV == GV_BSS_START, "BKBT: gChecksumsGV is not at GV_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsMMM == MMM_BSS_START, "BKBT: gChecksumsMMM is not at MMM_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsTTC == TTC_BSS_START, "BKBT: gChecksumsTTC is not at TTC_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsMM == MM_BSS_START, "BKBT: gChecksumsMM is not at MM_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsBGS == BGS_BSS_START, "BKBT: gChecksumsBGS is not at BGS_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsRBB == RBB_BSS_START, "BKBT: gChecksumsRBB is not at RBB_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsFP == FP_BSS_START, "BKBT: gChecksumsFP is not at FP_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsSM == SM_BSS_START, "BKBT: gChecksumsSM is not at SM_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsCutscenes == cutscenes_BSS_START, "BKBT: gChecksumsCutscenes is not at cutscenes_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsLair == lair_BSS_START, "BKBT: gChecksumsLair is not at lair_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsFight == fight_BSS_START, "BKBT: gChecksumsFight is not at fight_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsCCW == CCW_BSS_START, "BKBT: gChecksumsCCW is not at CCW_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+ASSERT(gChecksumsEmptyLvl == emptyLvl_BSS_START, "BKBT: gChecksumsEmptyLvl is not at emptyLvl_BSS_START (a new .bss is linked ahead of checksums.c.o)");
+
+/* Every level overlay is loaded at the end of core2 and has to end below the Stop 'n' Swop block that
+   core1 keeps at 0x803A5C00 (src/core1/code_1D5D0.c:127). Past it the game overwrites the overlay's last
+   variables, and neither the linker nor an emulator notices. Stop the link. */
+BKBT_OVERLAY_CEILING = 0x803A5C00;
+ASSERT(core2_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: core2 ends above 0x803A5C00: core1 + core2 have grown past the free RAM");
+ASSERT(CC_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: CC ends above 0x803A5C00: core1 + core2 + CC have grown past the free RAM");
+ASSERT(GV_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: GV ends above 0x803A5C00: core1 + core2 + GV have grown past the free RAM");
+ASSERT(MMM_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: MMM ends above 0x803A5C00: core1 + core2 + MMM have grown past the free RAM");
+ASSERT(TTC_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: TTC ends above 0x803A5C00: core1 + core2 + TTC have grown past the free RAM");
+ASSERT(MM_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: MM ends above 0x803A5C00: core1 + core2 + MM have grown past the free RAM");
+ASSERT(BGS_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: BGS ends above 0x803A5C00: core1 + core2 + BGS have grown past the free RAM");
+ASSERT(RBB_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: RBB ends above 0x803A5C00: core1 + core2 + RBB have grown past the free RAM");
+ASSERT(FP_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: FP ends above 0x803A5C00: core1 + core2 + FP have grown past the free RAM");
+ASSERT(SM_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: SM ends above 0x803A5C00: core1 + core2 + SM have grown past the free RAM");
+ASSERT(cutscenes_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: cutscenes ends above 0x803A5C00: core1 + core2 + cutscenes have grown past the free RAM");
+ASSERT(lair_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: lair ends above 0x803A5C00: core1 + core2 + lair have grown past the free RAM");
+ASSERT(fight_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: fight ends above 0x803A5C00: core1 + core2 + fight have grown past the free RAM");
+ASSERT(CCW_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: CCW ends above 0x803A5C00: core1 + core2 + CCW have grown past the free RAM");
+ASSERT(emptyLvl_VRAM_END <= BKBT_OVERLAY_CEILING, "BKBT: emptyLvl ends above 0x803A5C00: core1 + core2 + emptyLvl have grown past the free RAM");
