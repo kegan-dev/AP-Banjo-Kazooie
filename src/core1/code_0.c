@@ -5,6 +5,9 @@
 #include "functions.h"
 #include "variables.h"
 #include "version.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 s32 D_80275610 = 0; // always set to 0
 s32 D_80275614 = 0;
@@ -140,7 +143,141 @@ void func_8023DBDC(void) {
     func_8023DFF0(3);
 }
 
+#if BKBT
+/* The way back to Tooie in a dual-boot image (dual-boot contract 2; layout and the reason for the
+ * uncached access in include/bkbt.h). The Tooie hack's launcher announces every start of this game with
+ * a token in the handoff block and passes the address of the payload it has just loaded. The payload is
+ * not part of this ROM and holds one thing, the return launcher. This file decides when to call it.
+ *
+ * Trust comes from the token alone, and the token is taken away the moment it is read. A ROM started by
+ * itself, a reset of this game and RAM left over from an earlier session all find no token, so nothing
+ * that happens to lie in Expansion Pak RAM is ever called, however much it looks like a payload.
+ *
+ * The statics are initialised data on purpose: they hold a value from the moment core1 is loaded, with
+ * nothing depending on who clears which bss. */
+static bool sBkbtLaunched = FALSE;            /* this game was started by the launcher (later: destination, save backend) */
+static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
+static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller */
+static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
+
+/* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
+ * tools that test a ROM: a test that expects the chord to do nothing proves nothing unless the game is
+ * shown to have seen the chord. The one static here that is not initialised: a tool reaches it through
+ * the pointer below and checks that against this file's .bss (BKBT.md, "Exports for tools"). core1_main
+ * clears it at every boot. */
+static u32 sBkbtChordSeen;
+u32 *bkbt_ptr_chord_seen = &sBkbtChordSeen;
+
+/* Called before anything else in core1_init, so that the token is gone before the game runs. */
+void bkbt_init(void) {
+    volatile u32 *handoff = BKBT_HANDOFF;
+    u32 token;
+    u32 payload;
+    u32 *header;
+
+    /* The block is above 4 MiB: without the Expansion Pak there is nothing there to read or to zero.
+     * osMemSize is RDRAM 0x318, written by the IPL3 (lib/ultralib/src/os/parameters.s:13). */
+    if (osMemSize < 0x800000) {
+        return;
+    }
+
+    token = handoff[BKBT_HANDOFF_TOKEN];
+    payload = handoff[BKBT_HANDOFF_PAYLOAD];
+    handoff[BKBT_HANDOFF_TOKEN] = 0;
+    handoff[BKBT_HANDOFF_PAYLOAD] = 0;
+
+    if (token != (BKBT_TOKEN | (u32) bkbt_contract)) {
+        return; /* standalone */
+    }
+    sBkbtLaunched = TRUE;
+    sBkbtFlags = handoff[BKBT_HANDOFF_FLAGS];
+
+    /* A launcher that loaded no payload passes 0. The header has to lie inside the Expansion Pak's half
+     * of RAM as a whole, on a word boundary, and belong to this contract. */
+    if ((payload & 3) || payload < BKBT_PAYLOAD_RAM_START || payload > BKBT_PAYLOAD_RAM_END - BKBT_PAYLOAD_HEADER_SIZE) {
+        return;
+    }
+    header = (u32 *) payload;
+    if (header[0] == BKBT_PAYLOAD_MAGIC && header[BKBT_PAYLOAD_CONTRACT] == (u32) bkbt_contract) {
+        sBkbtReturnEntry = (void (*)(void)) header[BKBT_PAYLOAD_ENTRY];
+    }
+}
+
+/* Where the chord may send the player back. The front end: the opening logos, the concert and the file
+ * select (game mode 3, like a level), and the attract demos the title plays over (game mode 7). Not the
+ * other modes that run from recorded input, 8, 9 and 10: Bottles' bonus, the last entry of the character
+ * parade and the Stop 'n' Swop picture start inside a played file (src/core2/code_C4320.c:93-127). The
+ * limit is this function's alone: the return works from anywhere, which is what the flag is for. */
+static bool bkbt_chordAllowed(void) {
+    enum map_e map;
+
+    if (sBkbtFlags & BKBT_FLAG_CHORD_ANYWHERE) {
+        return TRUE;
+    }
+    map = gsworld_getMap();
+    return map == MAP_1E_CS_START_NINTENDO
+        || map == MAP_1F_CS_START_RAREWARE
+        || map == MAP_91_FILE_SELECT
+        || getGameMode() == GAME_MODE_7_ATTRACT_DEMO;
+}
+
+/* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.
+ * That is not once per drawn frame: two iterations run on the frame of a map change. */
+void bkbt_frame(void) {
+    volatile u32 *handoff = BKBT_HANDOFF;
+    u32 countdown;
+    u16 button;
+    bool down;
+
+    /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
+     * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the
+     * controller's reset bit, depending on what delivers the pad (include/bkbt.h); either counts.
+     *
+     * The chord has to be seen not down once before it counts: a player still holding it from Tooie must
+     * not bounce straight back. Only a read of the pad can show that. Until there has been one the chord
+     * is neither down nor released, however many iterations go by.
+     *
+     * This part needs nothing from the handoff block and runs in a ROM started by itself too, where it
+     * leads nowhere: the counter is what tells a tool that the game saw the chord it was given. */
+    down = FALSE;
+    if (bkbt_padButton(&button)) {
+        if ((button & BKBT_CHORD_HELD) == BKBT_CHORD_HELD && (button & BKBT_CHORD_START) != 0) {
+            down = TRUE;
+            sBkbtChordSeen++;
+        } else {
+            sBkbtChordArmed = TRUE;
+        }
+    }
+
+    /* Without an entry the block is not looked at: there may be no RAM where it is. */
+    if (sBkbtReturnEntry == NULL) {
+        return;
+    }
+
+    /* Tests: the Tooie hack leaves a number of iterations after which the game goes back by itself.
+     * The count is stored before the call, which does not come back: the word has to read 0, stay, once
+     * it has run out, whatever looks at it next. */
+    countdown = handoff[BKBT_HANDOFF_COUNTDOWN];
+    if (countdown != 0) {
+        countdown--;
+        handoff[BKBT_HANDOFF_COUNTDOWN] = countdown;
+        if (countdown == 0) {
+            sBkbtReturnEntry();
+        }
+    }
+
+    /* Outside the modes that play recorded input, joy_update blanks pad 0's buttons for the game while L
+     * and R are held (src/core1/joy.c:254-280), so the chord does not also pause or start a file. */
+    if (down && sBkbtChordArmed && bkbt_chordAllowed()) {
+        sBkbtReturnEntry();
+    }
+}
+#endif
+
 void core1_init(void) {
+#if BKBT
+    bkbt_init();
+#endif
 #if VERSION == VERSION_PAL
      osTvType = OS_TV_TYPE_PAL;
 #endif
@@ -174,17 +311,6 @@ void globalTimer_decTimer(void) {
     gGlobalTimer--;
 }
 
-#if BKBT
-/* Frame hook: mainLoop calls the handler of the Banjo-Kazooie payload once per iteration, before the game
- * update. The payload is not part of this ROM. The dual-boot launcher loads it into Expansion Pak RAM;
- * bkbt_payload (manual_syms.us.v10.txt) is its header: 'BKPL' at +0, the handler's address at +4. The
- * handler is read from the header at run time, so this ROM does not depend on the payload's layout. A ROM
- * started on clean RAM finds no magic and skips the call. The magic is all that is checked: a payload left
- * in RAM by an earlier session, or one assembled for another build of this ROM, would be called too. */
-#define BKBT_PAYLOAD_MAGIC 0x424B504C /* 'BKPL' */
-extern u32 bkbt_payload[];
-#endif
-
 void mainLoop(void) {
     s32 x, y;
     s32 r, g, b, a;
@@ -209,9 +335,7 @@ void mainLoop(void) {
     sDisableInput = FALSE;
 
 #if BKBT
-    if (bkbt_payload[0] == BKBT_PAYLOAD_MAGIC) {
-        ((void (*)(void)) bkbt_payload[1])();
-    }
+    bkbt_frame();
 #endif
     baMotor_80250C08();
 

@@ -7,6 +7,9 @@
 
 #include "version.h"
 #include "checksums.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 s32 D_80275D30 = VER_SELECT(0xC3A68832, 0xED7BCDB7, 0, 0); // CCW_DATA_CRC2
 s32 D_80275D34 = VER_SELECT(0xDDC3A724, 0xF82DC7AC, 0, 0); // FIGHT_DATA_CRC2
@@ -42,6 +45,36 @@ static f32 sSecsPostTransition;
 static OSMesgQueue D_802816E8;
 static OSMesg D_80281700[5];
 static s32 D_80275D38 = 0;
+
+#if BKBT
+/* Pad 0 as the controller last answered: what the chord that returns to Tooie is read from
+ * (include/bkbt.h, BkbtPad; bkbt_frame in code_0.c). joy_readData below is the only writer.
+ *
+ * The game's own copies cannot serve. In the modes that play recorded input demo_readInput stores the
+ * demo's input into sInputs[0] (joy_update, below), and it stays there until the next read of the pad
+ * comes back. An iteration that starts before that copies the demo's word into sInputsPrimary. A chord
+ * held all along then read as not down for one iteration, which armed it, and the game went back to
+ * Tooie by itself: seen 2026-10-12 on mupen64plus with a controller plugged in, 75 frames into the first
+ * attract demo.
+ *
+ * Uninitialised on purpose: core1_main clears core1's bss at every boot, so samples is 0 until the pad
+ * has been read, which is how bkbt_frame knows that button means nothing yet.
+ *
+ * volatile because two threads use it, and the order of the accesses is the whole protection. The pad
+ * thread (priority 40, include/core1/joy.h:5) can interrupt the main thread (20, include/core1/main.h:8)
+ * anywhere outside joy_update, which raises the main thread above it for its own copy; the main thread
+ * never interrupts the pad thread. So bkbt_padButton looks at samples first and at button second: when
+ * samples was not 0, button has been stored at least once, and a read that comes in between only makes
+ * it newer. The other order could pair the cleared button with the count of the first read, a chord
+ * that is down seen as released. */
+static volatile BkbtPad sBkbtPad;
+
+/* For the tools that test a ROM (BKBT.md, "Exports for tools"): the static above has no symbol, so the
+ * map cannot say where it is. This pointer can be found in the map and read from RAM. Initialised data,
+ * never bss, and below the static it points to. Without a controller the game never writes the record
+ * (joy_readData), so what a tool stores there stays. */
+volatile BkbtPad *bkbt_ptr_pad = &sBkbtPad;
+#endif
 
 /**
  * Clamps and normalises joystick input axis
@@ -318,9 +351,43 @@ void joy_readData()
 {
     controller_func_8024F35C(0);
 
+#if BKBT
+    if (!sOsContStatus.errno)
+    {
+        osContGetReadData(sInputs);
+
+        /* Pad 0 answered this read: record it (sBkbtPad, above). osContGetReadData stores a pad's
+         * buttons only when that pad's errno comes out 0 and leaves them alone otherwise
+         * (lib/ultralib/src/io/contreaddata.c:40-48), and what it leaves alone can be a demo's input.
+         * button before samples, like the reader expects them. Nothing in between can let the main
+         * thread run, so sInputs[0] is still what the call above stored. */
+        if (!sInputs[0].errno)
+        {
+            sBkbtPad.button = sInputs[0].button;
+            sBkbtPad.samples++;
+        }
+    }
+#else
     if (!sOsContStatus.errno)
         osContGetReadData(sInputs);
+#endif
 }
+
+#if BKBT
+/**
+ * Pad 0's buttons as the controller last answered, whatever a demo has put into the game's own pad state.
+ * Returns FALSE, and leaves `button` alone, while the pad has not been read since boot.
+ */
+bool bkbt_padButton(u16 *button)
+{
+    /* samples first, button second: see sBkbtPad */
+    if (sBkbtPad.samples == 0)
+        return FALSE;
+
+    *button = sBkbtPad.button;
+    return TRUE;
+}
+#endif
 
 void joy_main(void *null)
 {

@@ -12,6 +12,12 @@ static s32 sDMEMdword;
 static s32 sStatus;
 #endif
 
+#if BKBT
+/* For the tools that test a ROM (BKBT.md, "Exports for tools"): sUcodeData has no symbol. A tool finds
+ * this pointer in the map, reads it from RAM and compares the buffer with the ROM's IPL3 at 0xB70. */
+u8 *bkbt_ptr_ucode = sUcodeData;
+#endif
+
 void ucode_load(void) {
 #if ANTI_TAMPER
     sDMEMdword = IO_READ(SP_DMEM_START) ^ 0xFFFFFFFF;

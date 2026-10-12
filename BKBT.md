@@ -43,7 +43,8 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    disturbed. Five users of the validators stay compiled (the picture `mainLoop` draws on a failed
    validation, and penalties in pause, sound, score and the map model). They can do nothing while the
    validators return `TRUE`, so a validator must not be brought back.
-3. **`BKBT`**, the switch for hack code, and its first user, the frame hook (below).
+3. **`BKBT`**, the switch for hack code, and its first user: the way back to Tooie in a dual-boot image
+   ("The frame hook" below).
 4. **Link-time guards** at the end of `manual_syms.us.v10.txt`, for mistakes that neither the linker nor
    an emulator reports (rules below).
 5. **A build that cannot pass off a stale or damaged result**: objects depend on the switches and on the
@@ -52,20 +53,157 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 
 ## The frame hook
 
-With `BKBT=1`, `mainLoop` (`src/core1/code_0.c`) looks at `bkbt_payload` (`0x80500000`, set in
-`manual_syms.us.v10.txt`) on every iteration, before the game update. If the word there is `'BKPL'` it
-calls the address in the next word. The payload is not part of this ROM: the dual-boot image's launcher
-loads it into Expansion Pak RAM.
+With `BKBT=1` the game can hand the console back to Banjo-Tooie when it runs inside the dual-boot image of
+the BKBT repository. This is dual-boot contract **2**. The same ROM runs by itself: there it finds nothing
+of what follows and is the plain game.
 
-- It is a plain o32 call with no arguments. The handler has to preserve `s0`-`s7`, `sp`, `ra` and
-  `f20`-`f31`; `mainLoop` keeps live values in `s0`-`s2` across the call. Everything else is free,
-  `HI`/`LO` and `f0`-`f19` included. About 6 KB of the main thread's stack are available.
-- It is called once per `mainLoop` iteration. That is not once per drawn frame (two iterations run on
-  the frame of a map change), and `gGlobalTimer` does not count iterations (the game resets it when an
-  attract demo starts and freezes it in pause). A handler that needs a counter keeps its own.
-- Only the magic is checked. A payload left in RAM by an earlier session, or one assembled for another
-  build of this ROM (it carries RAM addresses of the build it was made for), is called just the same.
-  This has to be closed before a ROM from this branch goes into an image.
+Two functions in `src/core1/code_0.c` do it, with the layout in `include/bkbt.h`:
+
+- `bkbt_init()` is the first statement of `core1_init`. It decides once per boot whether a return exists.
+- `bkbt_frame()` is called by `mainLoop` on every iteration, after the optional `joy_update` and before
+  `baMotor_80250C08`. It decides when to return.
+
+The return itself is not in this ROM. It is the entry of a payload that the Tooie hack's launcher loads
+into Expansion Pak RAM before it starts this game: the return launcher, which contains no address of this
+game and so does not depend on this build. One payload serves every build of the same contract.
+
+### The contract number
+
+`bkbt_contract = 2;` in `manual_syms.us.v10.txt` is the only place on this side that says the number. It
+is a linker symbol so that the map carries it; C uses it as `(u32) bkbt_contract`. The launcher carries
+the same number in a tag, the Tooie hack's C in a tagged record, the payload in its header, and the image
+builder of the BKBT repository compares them all. Raise it when the meaning of anything below changes.
+
+### The handoff block
+
+At `0x805FFF00`, in Expansion Pak RAM, which this game does not use. The Tooie hack owns the layout
+(`hack/bt/n64/src/dualboot.h` in the BKBT repository; `include/bkbt.h` mirrors what this side uses, and
+the two have to be kept in step). This side uses four words:
+
+| Offset | Meaning | Written by | This side |
+|---|---|---|---|
+| `+0x20` | launch token, `0x424B4700 \| contract` (`'B','K','G',2`), written on every launch of this game | Tooie's launcher | `bkbt_init` reads it and zeroes it |
+| `+0x24` | KSEG0 address of the header of the payload loaded in this launch, 0 if none | Tooie's launcher | `bkbt_init` reads it and zeroes it |
+| `+0x28` | test countdown: `mainLoop` iterations before the game returns by itself, 0 = stay | the Tooie hack | `bkbt_frame` counts it down |
+| `+0x2C` | flags. Bit 0: the chord also works outside the front end | the Tooie hack | `bkbt_init` latches it |
+
+**This side accesses the block through KSEG1 only** (`0xA05FFF00`, `volatile`). The return launcher
+writes the block uncached and then flushes the caches, so a line of the block that this game had left
+dirty in its data cache would be written back over what the launcher stored. No emulator models the
+caches: a cached access here passes every test and fails on a console.
+
+### `bkbt_init`
+
+- Without the Expansion Pak (`osMemSize < 0x800000`) it returns before it touches anything: the block is
+  above 4 MiB.
+- Otherwise it reads `+0x20` and `+0x24` and zeroes both, whatever they held.
+- A wrong token means standalone, and nothing more happens. The token is what the trust rests on. A ROM
+  started by itself, a reset of this game and RAM left behind by an earlier session all find no token,
+  because every start consumes it. A payload that merely lies in RAM is never called, however valid its
+  header looks.
+- With the right token it remembers that the launcher started the game (a static, for later use), latches
+  the flags, and accepts the payload if `+0x24` is a word-aligned KSEG0 address whose 20-byte header lies
+  inside `0x80400000..0x80800000`, with magic `'BKP2'` and this ROM's contract number. Then, and only
+  then, there is a return entry.
+
+The payload header, one word each:
+
+| Offset | Content |
+|---|---|
+| `+0x00` | `'BKP2'` |
+| `+0x04` | entry: returns to Tooie and never to its caller |
+| `+0x08` | load address (this side does not use it: the launcher passes the address) |
+| `+0x0C` | length in bytes |
+| `+0x10` | contract number |
+
+A header field never changes its meaning under the same magic.
+
+### `bkbt_frame`
+
+It does two things: on every iteration it looks at the chord, and when there is a return entry it decides
+whether to call it. Without an entry nothing is called and the handoff block is not even read.
+
+- **Countdown.** If `+0x28` is not zero it is decremented and stored, and when it has reached zero the
+  entry is called. It is stored before the call, so the word reads 0 from then on.
+- **Chord.** L + R + Start on pad 0 calls the entry if the chord is armed (below) and the policy allows
+  it: flag bit 0, or map `0x1F`, `0x1E` or `0x91` (the opening logos, the concert, the file select), or
+  game mode 7 (an attract demo). The policy is one function, `bkbt_chordAllowed`; the return itself
+  works from anywhere.
+- **The chord is read as L and R down, and Start or the controller's reset bit** (`0x0080` of
+  `OSContPad.button`). With L, R and Start all down an N64 controller recalibrates its stick and reports
+  that instead of Start: `START_BUTTON` reads 0 and the reset bit is set. A console and ares do that,
+  Project64 and mupen64plus deliver `START_BUTTON`. Found on ares v148 on 2026-10-11, where a test for
+  the three buttons never matched (the controller mapping there was checked and is right). The two
+  encodings are `0x1030` and `0x00B0`; `include/bkbt.h` has the masks.
+- **The chord is read from the pad record, not from the game's pad state.** `src/core1/joy.c` keeps pad
+  0 as the controller last answered: `BkbtPad` in `include/bkbt.h`, `{ u32 samples; u16 button; }`. It is
+  written in one place, `joy_readData`, when `osContGetReadData` has delivered pad 0 (the game found a
+  controller at boot, and pad 0's `errno` in that read is 0): `button` is the pad's button word and
+  `samples` counts those reads since boot. `bkbt_frame` gets it through `bkbt_padButton`. The game's own
+  `sInputs[0]` and `sInputsPrimary` cannot serve. In the modes that play recorded input a demo's word
+  sits in `sInputs[0]` until the next read of the pad comes back, and an iteration that starts before
+  then copies it into `sInputsPrimary`. A chord held all along then read as released for one iteration,
+  and the game went back to Tooie by itself (mupen64plus with a controller plugged in, 2026-10-12, 75
+  frames into the first attract demo).
+- **The chord is edge-armed.** It counts only once a read of the pad has shown it not down since boot, so
+  a player who still holds it from Tooie does not bounce straight back. While `samples` is 0 the pad has
+  not been read: the chord is then neither down nor released, nothing arms and nothing is called,
+  however many iterations go by. (Before the record there was a rule that left the first two iterations
+  out, an iteration count standing in for "the pad has been read".)
+- **The chord counter.** `bkbt_frame` counts the iterations on which it found the chord down, whether
+  the entry was called or not, and also when there is no entry. It is there for the tools: a test that
+  expects the chord to do nothing proves nothing unless the game is shown to have seen the chord.
+
+What the entry can rely on, and what a change to these functions has to keep:
+
+- It is a plain o32 call with no arguments, on the main thread with interrupts on. The entry expects
+  nothing in any register and does not come back.
+- `bkbt_frame` runs once per `mainLoop` iteration. That is not once per drawn frame (two iterations run
+  on the frame of a map change), and `gGlobalTimer` does not count iterations (the game resets it when an
+  attract demo starts and freezes it in pause). The countdown counts iterations.
+- Outside the modes that play recorded input, `joy_update` blanks pad 0's buttons for the game while L
+  and R are held, so the chord does not also pause the game or start a file.
+- Two threads use the pad record without a lock, and the order of the accesses is what makes that
+  safe: the pad thread stores `button` and then counts the sample, `bkbt_padButton` reads `samples` and
+  then `button`. The pad thread can interrupt the main thread between the two reads, never the other way
+  round. The comment at `sBkbtPad` in `src/core1/joy.c` has the reasoning; the record is `volatile` so
+  that the compiler keeps the order.
+
+For a tool that plays the pad: the record is found through `bkbt_ptr_pad` ("Exports for tools" below),
+`samples` at `+0` (32 bits) and `button` at `+4` (16 bits). A game without a controller never writes
+it, so what a tool stores there stays. The pad counts as read once `samples` is not 0, and a chord has to
+be seen released before it works: store a `button` without the chord and a `samples` of 1 or more, let an
+iteration pass, then store the chord. A chord that is in the record from the first sample on is a chord
+held since boot and does nothing until it is released. With a controller attached the game overwrites
+`button` at every retrace, and a tool has to press the emulator's buttons instead. The counter, through
+`bkbt_ptr_chord_seen`, goes up by one for every iteration that saw the chord.
+
+By hand, the chord was seen to work in the dual-boot image with this build on Project64 3.0.1 and on
+ares v148 (the owner, 2026-10-12; `hack/DUALBOOT.md` of the BKBT repository, "Status"). Everything
+else here was checked on mupen64plus only (recompiler and pure interpreter), in two ways. On a plain ROM with a stub in
+place of the payload: a tool writes the stub and the handoff words into RAM and presses reset, which
+keeps RDRAM (the real payload cannot be used that way, it would run this ROM's IPL3 as Tooie's). And
+inside the dual-boot image with the real launcher and the real payload; what was run there is listed in
+`hack/DUALBOOT.md` of the BKBT repository, "Checked". The pad rule above was checked on the plain ROM on
+2026-10-12, in two ways again. With no controller and a tool writing the record: a chord word without a
+sample neither arms nor fires; a chord that is there before the first iteration (a writer thread; the
+counter read 1 after one iteration) or from the first frame never fires in 2160 frames, through the
+start of the first attract demo, while the counter goes up on every frame; released and pressed it
+fires; both encodings; the front-end limit and the flag that lifts it; the countdown; no token, nothing.
+And with mupen64plus's input plugin and a controller plugged in, the kind of test in which `joy_readData`
+itself writes the record: the record follows the pad within a frame, with two reads per drawn frame; a
+chord held from before the boot never fires in 2400 frames, through the first attract demo and into the
+file select that the held Start leads to, although `sInputsPrimary` read `0x0000` on one frame of the
+demo; released and pressed it fires; a tap of three frames fires. That controller's own buttons deliver
+`0x1030` only. The image was then run with a controller as well (`hack/DUALBOOT.md` of the BKBT
+repository, "Checked"), and there the check tool answers the emulator's polls of the pad itself, so that
+`0x00B0` went through `joy_readData` too: tapped, and held from before BK's boot past the first
+attract demo, on the recompiler and the pure interpreter. With `0x00B0` held the demo plays on, because
+that word has no Start in it. L + R alone, held for 8 frames before the first chord of a stay, moved
+neither the counter nor the game. Not checked: any other emulator, and a console, where the cache rule
+above and the order of the two threads' accesses are the parts that matter. Without the Expansion Pak
+the ROM was only booted in the emulator (`osMemSize` `0x400000`, nothing called); that the size test
+comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, not by a run.
 
 ## Rules for new code
 
@@ -79,7 +217,38 @@ loads it into Expansion Pak RAM.
 - **No uninitialised global in `src/boot`.** The entry stub clears a fixed number of bytes of the boot
   segment's bss. The link stops with a `BKBT:` message.
 - **core1 + core2 + the largest level overlay have about 68 KB to grow** (68,864 bytes in the first hack
-  build). Every level overlay is loaded at the end of core2 and has to end below `0x803A5C00`. The link
-  stops with a `BKBT:` message past that.
+  build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12). Every
+  level overlay is loaded at the end of core2 and has to end below `0x803A5C00`. The link stops with a
+  `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
+- **Exports for tools.** A tool that tests a ROM finds a global in the map. A `static` has no symbol
+  (IDO emits none), so a static that a tool needs gets an exported pointer: `<type> *bkbt_ptr_<name> =
+  <the static>;` under `#if BKBT`, in the file that owns the static and below it. The tool takes the
+  pointer variable's address from the map, reads the pointer from RAM and checks that it lies inside
+  that file's `.bss` range in the map. The pointer is initialised data, never bss: it has to hold the
+  address from the moment the segment is loaded, and it must not become an uninitialised global ahead of
+  a checksum slot (above). Only in core1 and core2, which are always in RAM; the level overlays share one
+  address and are there one at a time. Today: `bkbt_ptr_pad` (`sBkbtPad`, the pad record that the chord
+  is read from) in `src/core1/joy.c`, `bkbt_ptr_chord_seen` (`sBkbtChordSeen`, the chord counter) in
+  `src/core1/code_0.c`, `bkbt_ptr_ucode` (`sUcodeData`, the rspboot buffer) in `src/core1/ucode.c`. The
+  statics they point to are uninitialised, so each lies in its file's `.bss`, and core1 clears its bss
+  at every boot. The game's own pad arrays (`sInputs`, `sInputsPrimary`) are not exported any more:
+  the chord is not read from them, and a tool that wrote them would not reach it. The map being played
+  and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals.
+- **The ROM is exactly 16 MiB, by itself and in the dual-boot image**, where it sits unchanged at cart
+  `0x3000000`. Nothing relocates it: the launcher there sets `osRomBase` (RDRAM `0x308`), and libultra's
+  two raw PI functions OR that word into every address they are given
+  (`lib/ultralib/src/io/pirawdma.c:40`, `pirawread.c:63`). Three things follow.
+  - Hack code reads the cart the way the game does, by an offset into this ROM, through
+    `parallel_readDMA`, `osPiStartDma` or `osPiReadIo`. It never passes an absolute cart address of the
+    image to `parallel_readDMA` or to an `osPiRaw*` function: the OR would turn it into another address.
+    The handle-based `osEPi*` functions and `osCartRomInit` have a base of their own and are not for this
+    ROM's data.
+  - What the image holds outside this ROM (the payload slot at `0x2200000`, the info block behind it, the
+    space up to `0x3000000`) cannot be reached through the game's PI functions. Code that needs it brings
+    a PI routine of its own, and has to cope with a standalone ROM, where none of it exists.
+  - Nothing may grow the ROM past 16 MiB or into its last 128 KiB (`0xFE0000` and up), which have to stay
+    fill: at 64 MiB that is the top of the image, where some flashcarts keep save data. The image builder
+    refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-12 the last compressed
+    overlay ends at cart `0xFDA430`, 23,504 bytes below that line.

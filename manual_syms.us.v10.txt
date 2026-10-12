@@ -18,11 +18,13 @@ boot_core1_main = core1_main;
 
 /* BKBT (see BKBT.md). Nothing below moves anything: two absolute symbols and assertions. */
 
-/* Header of the Banjo-Kazooie payload that the dual-boot launcher loads into Expansion Pak RAM before it
-   starts the game: 'BKPL' at +0, the address of the per-frame handler at +4. mainLoop
-   (src/core1/code_0.c) calls the handler when the magic is there. The address belongs to the payload's
-   build (BK_PAYLOAD_RAM in the BKBT repository, hack/bk/asm/payload.asm). */
-bkbt_payload = 0x80500000;
+/* The number of the dual-boot contract this ROM implements (BKBT.md, "The frame hook"; the Tooie side's
+   copy is DUALBOOT_CONTRACT in hack/bt/n64/src/dualboot.h of the BKBT repository). Not an address: a
+   symbol, so that the map carries the number for the tools that pair this ROM with a launcher and a
+   payload. The C code takes it from here too, as (u32) bkbt_contract (include/bkbt.h), so this line is
+   the only place that says it. It is the low byte of the launch token: keep it below 0x100. */
+bkbt_contract = 2;
+ASSERT(bkbt_contract < 0x100, "BKBT: bkbt_contract does not fit the low byte of the launch token");
 
 /* overlay_load (src/core1/overlay.c) clears an overlay's bss and then writes four checksum words at its
    start, where gChecksums<overlay> is. A file whose .bss is linked ahead of checksums.c.o puts its first
