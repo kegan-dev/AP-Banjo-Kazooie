@@ -43,6 +43,12 @@ extern u8 bkbt_contract[];
 
 #define BKBT_FLAG_CHORD_ANYWHERE 0x00000001 /* the chord also works outside the front end */
 
+/* The save device of the dual-boot image is 32 KiB of SRAM, shared with the Tooie hack, and this game's
+ * save is 512 bytes of it (src/core1/eeprom.c), from the linker symbol bkbt_sram_offset on
+ * (manual_syms.us.v10.txt). An offset into the SRAM, not an address: use it as (u32) bkbt_sram_offset.
+ * The Tooie side's copy is DUALBOOT_BK_SRAM_OFFSET in hack/bt/n64/src/dualboot.h of the BKBT repository. */
+extern u8 bkbt_sram_offset[];
+
 /* The chord that asks for the return to Tooie, on pad 0: L and R down, and Start. It cannot be tested as
  * three buttons. With L, R and Start all down an N64 controller recalibrates its stick and reports that
  * instead of Start: in OSContPad.button START_BUTTON reads 0, the reset bit 0x0080 is set (libultra has
@@ -75,6 +81,7 @@ typedef struct {
 } BkbtPad;
 
 void bkbt_init(void);              /* src/core1/code_0.c: first thing in core1_init */
+bool bkbt_launched(void);          /* src/core1/code_0.c: TRUE when the Tooie launcher started this game */
 void bkbt_frame(void);             /* src/core1/code_0.c: once per mainLoop iteration */
 bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has not been read since boot */
 

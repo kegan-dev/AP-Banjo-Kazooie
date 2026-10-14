@@ -50,6 +50,11 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 5. **A build that cannot pass off a stale or damaged result**: objects depend on the switches and on the
    headers, the link depends on the symbol files it reads, and the final ROM gets its name only when
    `bk_rom_compress` succeeded and the file is 16 MiB.
+6. **The save device** (2026-10-14): inside the dual-boot image the game keeps its 512 bytes of save in
+   the image's SRAM, from `0x7000` on, instead of the EEPROM the image does not have; run by itself it
+   keeps its EEPROM ("The save device" below). `src/core1/eeprom.c`, the accessor `bkbt_launched()` in
+   `src/core1/code_0.c`, and the linker symbol `bkbt_sram_offset` with its assertions in
+   `manual_syms.us.v10.txt`.
 
 ## The frame hook
 
@@ -101,7 +106,8 @@ caches: a cached access here passes every test and fails on a console.
   started by itself, a reset of this game and RAM left behind by an earlier session all find no token,
   because every start consumes it. A payload that merely lies in RAM is never called, however valid its
   header looks.
-- With the right token it remembers that the launcher started the game (a static, for later use), latches
+- With the right token it remembers that the launcher started the game (`sBkbtLaunched`, read through
+  `bkbt_launched()`, by which the save code picks its device: "The save device" below), latches
   the flags, and accepts the payload if `+0x24` is a word-aligned KSEG0 address whose 20-byte header lies
   inside `0x80400000..0x80800000`, with magic `'BKP2'` and this ROM's contract number. Then, and only
   then, there is a return entry.
@@ -205,6 +211,65 @@ above and the order of the two threads' accesses are the parts that matter. With
 the ROM was only booted in the emulator (`osMemSize` `0x400000`, nothing called); that the size test
 comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, not by a run.
 
+## The save device
+
+The dual-boot image is one cartridge with one save device, 32 KiB of SRAM at cart address `0x08000000`,
+and no EEPROM. The Tooie hack keeps its save there from offset 0. With `BKBT=1`, when the launcher
+started this game, the game's 512 bytes of "EEPROM" are 512 bytes of that SRAM instead: block n is the
+8 bytes at `bkbt_sram_offset + 8 * n`. Run by itself the ROM never goes there and keeps its EEPROM. The
+full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
+repository, "The save device".
+
+- **Where.** `src/core1/eeprom.c`, under `#if BKBT`. `eeprom_writeBlocks` and `eeprom_readBlocks` ask
+  `bkbt_launched()` (`src/core1/code_0.c`) on every call: TRUE, the launcher's token was there at boot,
+  sends them to `bkbt_sramBlocks`; FALSE leaves them exactly as they were. No caller changed.
+- **The offset** is the linker symbol `bkbt_sram_offset = 0x7000;` in `manual_syms.us.v10.txt`, used as
+  `(u32) bkbt_sram_offset` (`include/bkbt.h`), so that the map carries it for the tools. `0x7000` is the
+  border the two games share: below it the SRAM is the Tooie hack's. The link stops if the offset is
+  below `0x7000`, not a multiple of 8, or leaves fewer than 512 bytes in the 32 KiB. The Tooie side's
+  copy is `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
+  `_Static_assert` in its `src/save.c`; nothing compares the two, so change both. The BKBT repository's
+  image builder refuses a build whose `bkbt_sram_offset` is not the border.
+- **The route.** The game's own `osPiStartDma` cannot reach the SRAM: it ORs `osRomBase` into every
+  address (`lib/ultralib/src/io/pirawdma.c:40`), and in the image that is `0xB3000000`, where this ROM
+  is. A handle has a base of its own (`epirawdma.c:40`). So every transfer is a request (`OSIoMesg`) of
+  type `OS_MESG_TYPE_EDMAREAD` or `OS_MESG_TYPE_EDMAWRITE` to the PI manager, with an SRAM handle of its
+  own (`DEVICE_TYPE_SRAM`, `PI_DOMAIN2`, base `0xA8000000`). It is built by hand: `osEPiStartDma`, which
+  builds the same request (`epidma.c:46-58`), is not among the libultra files this ROM links, and both
+  builds share that list (`decompressed.us.v10.yaml`).
+- **The buffer and the cache.** Every transfer goes through `sBkbtSramBuf`, on a 16-byte boundary inside
+  `sBkbtSramRaw` and 32 whole cache lines long, never through the caller's buffer: the game's save
+  records are `0x78` bytes apart and share cache lines with other variables. The buffer is written back
+  before every transfer and invalidated after a read.
+- **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside the 64 blocks, with nothing
+  transferred; 8 (`CONT_NO_RESPONSE_ERROR`) for a write that does not read back as written. Every write
+  is read back, into the buffer filled with `0xFF`, because the game wipes a file's old copy only when
+  the write of the new one returned 0 (`gameFile_8033CFD4`, `src/core2/code_B5E00.c:88-103`). A read
+  fills the buffer with `0xFF` first as well, what a blank EEPROM holds.
+
+What a change to it has to keep:
+
+- **Main thread only.** One request, one queue and one buffer serve all transfers, and each call waits
+  until its transfer is over. Every caller of the two functions is on the main thread, and `bkbt_frame`
+  calls the return entry from there, so no save transfer is in flight when the console goes back to
+  Tooie.
+- **Never a caller's buffer as the DMA's RAM side, and the cache calls around every transfer.** No
+  emulator models the cache: a mistake here passes every test and fails only on a console. The build of
+  2026-10-14 was checked in the disassembly of `eeprom.c.o`.
+- **Never outside the 64 blocks.** Below them is the Tooie hack's save.
+- **The `EDMA` types.** The plain DMA types would go through `osRomBase` and read this game's own ROM.
+- **The choice by `bkbt_launched()` alone.** A ROM run by itself must never write an SRAM it knows
+  nothing about.
+
+What it cost in the build of 2026-10-14 (`eeprom.c.o`: `.text` `0x4F0` bytes, `.bss` `0x2D0` bytes, from
+the map): 1,728 bytes of RAM headroom and 640 bytes of ROM room ("Rules for new code").
+
+Checked on mupen64plus with the BKBT repository's save check (`tools/dualboot_save_check.py`), on
+2026-10-14: in the image, a planted save, a second boot from the file that run left (recompiler and
+pure interpreter), no file at all, a hostile file, a played save and the range test; and the ROM by
+itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by hand is in
+`hack/DUALBOOT.md` of the BKBT repository, "Status". Not checked: a console.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -216,8 +281,9 @@ comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, 
   wrong.
 - **No uninitialised global in `src/boot`.** The entry stub clears a fixed number of bytes of the boot
   segment's bss. The link stops with a `BKBT:` message.
-- **core1 + core2 + the largest level overlay have about 68 KB to grow** (68,864 bytes in the first hack
-  build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12). Every
+- **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
+  build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
+  with the save device of 2026-10-14: the largest, lair, ends at `0x80395840` in that build's map). Every
   level overlay is loaded at the end of core2 and has to end below `0x803A5C00`. The link stops with a
   `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
@@ -235,7 +301,11 @@ comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, 
   statics they point to are uninitialised, so each lies in its file's `.bss`, and core1 clears its bss
   at every boot. The game's own pad arrays (`sInputs`, `sInputsPrimary`) are not exported any more:
   the chord is not read from them, and a tool that wrote them would not reach it. The map being played
-  and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals.
+  and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals. Neither does
+  what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
+  `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too. Two of those names
+  are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
+  repository has to follow.
 - **The ROM is exactly 16 MiB, by itself and in the dual-boot image**, where it sits unchanged at cart
   `0x3000000`. Nothing relocates it: the launcher there sets `osRomBase` (RDRAM `0x308`), and libultra's
   two raw PI functions OR that word into every address they are given
@@ -244,11 +314,16 @@ comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, 
     `parallel_readDMA`, `osPiStartDma` or `osPiReadIo`. It never passes an absolute cart address of the
     image to `parallel_readDMA` or to an `osPiRaw*` function: the OR would turn it into another address.
     The handle-based `osEPi*` functions and `osCartRomInit` have a base of their own and are not for this
-    ROM's data.
+    ROM's data. The one use of a handle is the save device, for the SRAM, which is not this ROM: a
+    request with an SRAM handle, built by hand and sent to the PI manager, because `osEPiStartDma` is not
+    linked ("The save device").
   - What the image holds outside this ROM (the payload slot at `0x2200000`, the info block behind it, the
     space up to `0x3000000`) cannot be reached through the game's PI functions. Code that needs it brings
-    a PI routine of its own, and has to cope with a standalone ROM, where none of it exists.
+    a PI routine of its own, and has to cope with a standalone ROM, where none of it exists. The save
+    device does both: it reaches the SRAM with a handle, through the game's own PI manager, and by
+    itself the ROM keeps its EEPROM.
   - Nothing may grow the ROM past 16 MiB or into its last 128 KiB (`0xFE0000` and up), which have to stay
     fill: at 64 MiB that is the top of the image, where some flashcarts keep save data. The image builder
-    refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-12 the last compressed
-    overlay ends at cart `0xFDA430`, 23,504 bytes below that line.
+    refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-14 the last compressed
+    overlay ends at cart `0xFDA6B0`, 22,864 bytes below that line (23,504 in the build of 2026-10-12,
+    before the save device).

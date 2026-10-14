@@ -155,7 +155,7 @@ void func_8023DBDC(void) {
  *
  * The statics are initialised data on purpose: they hold a value from the moment core1 is loaded, with
  * nothing depending on who clears which bss. */
-static bool sBkbtLaunched = FALSE;            /* this game was started by the launcher (later: destination, save backend) */
+static bool sBkbtLaunched = FALSE;            /* this game was started by the launcher: bkbt_launched() */
 static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
 static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller */
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
@@ -201,6 +201,13 @@ void bkbt_init(void) {
     if (header[0] == BKBT_PAYLOAD_MAGIC && header[BKBT_PAYLOAD_CONTRACT] == (u32) bkbt_contract) {
         sBkbtReturnEntry = (void (*)(void)) header[BKBT_PAYLOAD_ENTRY];
     }
+}
+
+/* TRUE when the Tooie launcher started this game, that is, when this ROM runs inside the dual-boot image.
+ * The save code picks its device by it (src/core1/eeprom.c): the image has SRAM and no EEPROM. Good from
+ * bkbt_init on, which runs before anything else in the game. */
+bool bkbt_launched(void) {
+    return sBkbtLaunched;
 }
 
 /* Where the chord may send the player back. The front end: the opening logos, the concert and the file
