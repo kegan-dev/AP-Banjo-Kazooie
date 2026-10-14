@@ -246,6 +246,11 @@ repository, "The save device".
   is read back, into the buffer filled with `0xFF`, because the game wipes a file's old copy only when
   the write of the new one returned 0 (`gameFile_8033CFD4`, `src/core2/code_B5E00.c:88-103`). A read
   fills the buffer with `0xFF` first as well, what a blank EEPROM holds.
+- **The bus timing.** The handle carries latency 5, pulse `0x0C`, page size `0x0D` and release 2, the
+  values Ocarina of Time uses for its SRAM. libultra writes them to the PI's domain 2 registers at the
+  first transfer through the handle (`EPI_SYNC`, `PRinternal/piint.h`), and they stay: after a visit to
+  this game the Tooie hack's own SRAM transfers run on them too. No emulator used so far acts on them,
+  and they have not been tried on a console.
 
 What a change to it has to keep:
 

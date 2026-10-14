@@ -89,6 +89,17 @@ static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) 
         sBkbtSramHandle.type = DEVICE_TYPE_SRAM;
         sBkbtSramHandle.domain = PI_DOMAIN2;
         sBkbtSramHandle.baseAddress = PHYS_TO_K1(PI_DOM2_ADDR2); /* 0xA8000000 */
+        /* The bus timing for the half of the cartridge bus the SRAM is on: a console has to be told how
+         * fast it may talk to the chip. Nothing else in the image sets it, so without these values the
+         * transfers would run on whatever the console was left with. libultra writes them to the PI at
+         * the first transfer through this handle (EPI_SYNC, PRinternal/piint.h), and they stay: after a
+         * visit to this game, the Tooie hack's own SRAM transfers run on them too. The values are the
+         * ones Ocarina of Time uses for its SRAM. No emulator used so far acts on them, and they have not
+         * been tried on a console. */
+        sBkbtSramHandle.latency = 5;
+        sBkbtSramHandle.pulse = 0x0C;
+        sBkbtSramHandle.pageSize = 0x0D;
+        sBkbtSramHandle.relDuration = 2;
 
         osCreateMesgQueue(&sBkbtSramQueue, &sBkbtSramMesg, 1);
         sBkbtSramBuf = (u8 *)(((u32) sBkbtSramRaw + 15) & ~15); /* up to the next multiple of 16 */
