@@ -55,6 +55,10 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    keeps its EEPROM ("The save device" below). `src/core1/eeprom.c`, the accessor `bkbt_launched()` in
    `src/core1/code_0.c`, and the linker symbol `bkbt_sram_offset` with its assertions in
    `manual_syms.us.v10.txt`.
+7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
+   exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
+   `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
+   intro" below).
 
 ## The frame hook
 
@@ -275,6 +279,59 @@ pure interpreter), no file at all, a hostile file, a played save and the range t
 itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by hand is in
 `hack/DUALBOOT.md` of the BKBT repository, "Status". Not checked: a console.
 
+## The new-game intro
+
+With `BKBT=1`, A on an empty game file no longer plays the intro, the cutscenes of Gruntilda and Tooty
+that come before the game. The game starts where they end, in Spiral Mountain at the exit from Banjo's
+house. There is no switch for it: every hack build skips, by itself and in the dual-boot image, and the
+matching build and the retail ROM play the intro. The owner asked for it on 2026-10-14. The boot sequence
+before the file select (logos, title screen, attract demo) is not changed.
+
+- **Where.** `gameSelect_update` in `src/core2/ch/gameSelect.c`, the new-game branch
+  (`!gameFile_isNotEmpty`), under `#if BKBT`: one `timedFunc_set_3` that asks `transitionToMap` for
+  `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE`. The `#else` is retail's call, which asks for
+  `MAP_85_CS_SPIRAL_MOUNTAIN_3`, the first intro map. The existing-game branch below it is not touched.
+- **Why there.** Each intro map hands on to the next through `cutscenetrigger_update`
+  (`src/core2/code_956B0.c:84-92`), and the last one, `MAP_89_CS_INTRO_BANJOS_HOUSE_2`, goes to
+  `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE` (`:89`). A loaded game that has not reached the
+  Lair goes to the same place (`warp_smExitBanjosHouse`, `gameSelect.c:521`, `code_956B0.c:1331-1333`).
+- **Why it is safe.** The intro saves nothing: a map change saves the game only when the level left is
+  1..0xC or the map is the game-over room (`gameSelect_saveAndExit`, `gameSelect.c:727-740`), and every
+  intro map is `LEVEL_D_CUTSCENE` (`src/core2/gc/section.c`). It also sets nothing a new game keeps: at
+  the first frame Banjo can move, the BKBT repository's new-game check finds the game's state equal to
+  that of a game that played the whole intro in every region it compares but one (the next item), and the
+  first record the game saves equal byte for byte.
+- **The one difference: the health pop-up.** The file select (map `0x91`) and Spiral Mountain are both
+  `LEVEL_B_SPIRAL_MOUNTAIN` (`gc/section.c`), and `game_loadMap` reloads the level only when the level
+  changes (`src/core2/code_5C870.c:91-101`). The intro goes from level B to D and back, so its arrival in
+  Spiral Mountain reloads the level, and the reload arms the latch `D_80385FE0` (`itemscore_levelReset`,
+  `src/core2/code_BEF20.c:221`, then `:242-275`), which shows the honeycomb health display once the
+  screen transition is over. The skip stays in level B, as a loaded game in Spiral Mountain does, and the
+  latch stays 0. It is never saved. The same latch charges a life lost in a death (`D_80385FE4`), which a
+  new game has cleared (`code_BEF20.c:196`).
+- **What it costs.** Nothing: the linker map of the build equals that of the build before it on every
+  line that does not mention `.mdebug`, so no address moved, and the RAM headroom and the ROM room are
+  what they were ("Rules for new code"). No new global, no new file.
+- **Turning it off.** If Archipelago should ever want the intro back, a setting would be read at this
+  same line (`docs/ROADMAP.md` of the BKBT repository, hack feature 8). Nothing reads one now.
+
+Checked on mupen64plus with the BKBT repository's new-game check (`tools/bk_newgame_check.py`), on
+2026-10-14, in the dual-boot image (recompiler and pure interpreter) and on the ROM by itself: a new game
+from an empty file asks for map `0x01` exit `0x12`, enters no intro map, and Banjo can move 91 frames of
+the emulator after A, where the build before this one, which plays the intro, took 5,043. Compared with a
+run of that build: 10 frames into control 21 of the 22 regions the tool compares are equal (the flags,
+scores, items and abilities, the stored and the level state, the game files and the global record in RAM,
+the selected game, map and exit; the tool lists them), the 22nd is the latch (1 after the intro, 0 after
+the skip), and the first saved record is identical. A loaded game goes where it always went (on the ROM
+by itself): to Spiral Mountain, and to the Lair when its record has all nine moves of Spiral Mountain and
+progress flag `0xBD`. The save check, the round trips and the anti-tamper checks pass on the same build,
+and its matching build is the retail ROM (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). By hand,
+the owner reported on 2026-10-14 that on Project64 3.0.1 and ares v148 it "all held": a new game on an
+empty file starting outside Banjo's house within seconds, a save made after it kept across closing the
+emulator, a new game on the second file (the gaming chair, where the music is handled differently), and
+an existing file loading where it always did. Not checked: a console; and whether the honeycombs pop up
+on arrival was neither looked at in a run nor part of the report.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -288,9 +345,9 @@ itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by
   segment's bss. The link stops with a `BKBT:` message.
 - **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
-  with the save device of 2026-10-14: the largest, lair, ends at `0x80395840` in that build's map). Every
-  level overlay is loaded at the end of core2 and has to end below `0x803A5C00`. The link stops with a
-  `BKBT:` message past that.
+  with the save device of 2026-10-14, and the same with the new-game intro of that day: the largest,
+  lair, ends at `0x80395840` in those builds' maps). Every level overlay is loaded at the end of core2
+  and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
 - **Exports for tools.** A tool that tests a ROM finds a global in the map. A `static` has no symbol
@@ -310,7 +367,9 @@ itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by
   what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
   `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too. Two of those names
   are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
-  repository has to follow.
+  repository has to follow. The BKBT repository's new-game check reads more globals, by name from the
+  map; several of those names were generated by the decomp too (its docstring lists them), and it stops
+  and names one that is missing.
 - **The ROM is exactly 16 MiB, by itself and in the dual-boot image**, where it sits unchanged at cart
   `0x3000000`. Nothing relocates it: the launcher there sets `osRomBase` (RDRAM `0x308`), and libultra's
   two raw PI functions OR that word into every address they are given

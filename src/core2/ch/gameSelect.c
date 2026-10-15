@@ -490,7 +490,21 @@ void gameSelect_update(Actor *this) {
                     chBottlesBonus_resetCompleted();
 
                     if (!gameFile_isNotEmpty(game_number)) { // New game
+#if BKBT
+                        /* Skip the intro cutscene for an empty game file in the
+                         * hack: players of the hack are already introduced to the
+                         * game and would get impatient waiting for it. The skip is
+                         * safe: it goes where the intro ends (code_956B0.c:89),
+                         * the same place a loaded save in Spiral Mountain goes,
+                         * and the intro saves nothing and sets nothing a new game
+                         * keeps. The only difference is the honeycomb pop-up on
+                         * arrival, which isn't saved, and a save loaded in Spiral
+                         * Mountain doesn't show it either.
+                         */
+                        timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_12_FROM_HOUSE, 1);
+#else
                         timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_85_CS_SPIRAL_MOUNTAIN_3, 0, 1);
+#endif
                     } else {
                         function_time = 0.0f;
 
