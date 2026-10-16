@@ -59,6 +59,9 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
    intro" below).
+8. **Start skips the opening logos from the first boot** (2026-10-15): retail ignores Start on the logos
+   after power-on and takes it only from the concert on. One initial value in `src/core2/code_9B180.c`,
+   in every hack build ("The opening logos" below).
 
 ## The frame hook
 
@@ -285,7 +288,8 @@ With `BKBT=1`, A on an empty game file no longer plays the intro, the cutscenes 
 that come before the game. The game starts where they end, in Spiral Mountain at the exit from Banjo's
 house. There is no switch for it: every hack build skips, by itself and in the dual-boot image, and the
 matching build and the retail ROM play the intro. The owner asked for it on 2026-10-14. The boot sequence
-before the file select (logos, title screen, attract demo) is not changed.
+before the file select (logos, title screen, attract demo) is not changed by it ("The opening logos"
+below is a separate change).
 
 - **Where.** `gameSelect_update` in `src/core2/ch/gameSelect.c`, the new-game branch
   (`!gameFile_isNotEmpty`), under `#if BKBT`: one `timedFunc_set_3` that asks `transitionToMap` for
@@ -332,6 +336,56 @@ emulator, a new game on the second file (the gaming chair, where the music is ha
 an existing file loading where it always did. Not checked: a console; and whether the honeycombs pop up
 on arrival was neither looked at in a run nor part of the report.
 
+## The opening logos
+
+With `BKBT=1`, Start on the opening logos (the N64 "N", then Rareware) goes to the title screen from the
+first boot on. In retail it does nothing there after power-on and works only from the concert that
+follows; after Save and Quit it works on the logos at once. The hack build now behaves as retail does
+after that first visit. There is no switch: every hack build, by itself and in the dual-boot image; the
+matching build and the retail ROM keep the wait. Start goes to the title, never straight to the file
+select, in both. Done on 2026-10-15.
+
+- **Where.** `src/core2/code_9B180.c:41-52`, under `#if BKBT`: `u8 D_8036DE78 = 0;`, where the `#else`
+  keeps retail's `= 1`.
+- **How it works** (read in the source). Both logos are map `0x1F` (`MAP_1F_CS_START_RAREWARE`); map
+  `0x1E` (`MAP_1E_CS_START_NINTENDO`, a misleading name) is the concert. The table `D_8036DE00`
+  (`code_9B180.c:32-39`) keys handlers by prop id, and prop `0x18` is in maps `0x1E` and `0x1F` only (the
+  map setups decompressed with the BKBT repository's `tools/bk_rom.py`). Its per-frame handler
+  `func_80322318` calls `func_8031D0C0` (`src/core2/code_956B0.c:250-257`), which on Start fades the music
+  and calls `func_8034B968` (`src/core2/code_C4320.c:234`); that asks for entry 0 of the front-end table
+  (`code_C4320.c:20-32`), map `0x02`, demo `0x5B`, mode 7: the title. Its load handler `func_803222F4`
+  (`code_9B180.c:111-116`) clears `D_8036DE78` if it is set and then zeroes the entry's `unk4`, which
+  makes the per-frame loop `func_80322490` (`:159-168`) skip the entry for that visit. So in retail the
+  first map with the prop after power-on, the logos, ignores Start; the concert and every later visit
+  (Save and Quit goes to map `0x1F`, `src/core2/code_14420.c:291`) take it. core2's `.data` is unpacked
+  from the ROM at every boot (`src/core1/code_0.c:295`, `src/core1/overlaymanager.c:115`), a launch from
+  Tooie included, so the flag was 1 at every launch.
+- **Why it is safe.** Starting at 0 is the state retail is in after the first visit. Nothing else
+  references `D_8036DE78` (grep of the decomp, its asm and its symbol files). Prop `0x18A`
+  (`func_80322298`, `func_803222BC`) shares the flag but is in none of the 129 map setups (a static scan,
+  not watched at run time).
+- **What it costs.** One byte of core2's `.data`. No section changed size and no address in the map
+  moved (compiled alone with IDO: `BKBT=0` gives identical sections, `BKBT=1` changes only `.data` byte
+  `0x78`). Because core2 is stored compressed, the ROM differs from the build before in 26,135 bytes: the
+  header checksum (`0x10..0x17`), core2's checksum slot in the boot code (`0x5E83..0x5E87`) and core2's
+  compressed block from `0xF36666`.
+- **The chord.** While L and R are held the game blanks every other button (`src/core1/joy.c:254-278`),
+  so after a launch with the chord Start skips the logos only once the chord has been let go (seen on
+  mupen64plus with that state simulated in RAM, not on this build). Below global timer 2
+  `controller_getStartButtonSafe` returns 0 (`joy.c:163-169`; read, not run).
+
+Checked on mupen64plus with the BKBT repository's logo check (`tools/bk_logo_check.py`), on 2026-10-15:
+`--expect skip` passed on the ROM by itself (recompiler and pure interpreter) and in the dual-boot image:
+Start at BK frame 60 asked for the title at +62, the title (map `0x02`, mode 7) came at +123, the concert
+was never entered. On the build before (`7a5333cb...`) `--expect wait` passed (the logos asked for the
+concert by themselves at +419; Start in the concert asked for the title within 2 frames) and `--expect
+skip` failed. The new-game check, the save check, the round trips and the anti-tamper checks pass on the
+same build, and its matching build is the retail ROM (`hack/DUALBOOT.md` of the BKBT repository,
+"Checked"). By hand, the owner reported on 2026-10-15 that on Project64 3.0.1 and ares v148 Start on the
+"N" went to the title after a launch from Tooie, still did after Save and Quit, and that left alone the
+logos, concert and title played in order. Not checked: a console; picture and sound were not judged by
+the tools.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -345,7 +399,8 @@ on arrival was neither looked at in a run nor part of the report.
   segment's bss. The link stops with a `BKBT:` message.
 - **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
-  with the save device of 2026-10-14, and the same with the new-game intro of that day: the largest,
+  with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
+  skip of 2026-10-15: the largest,
   lair, ends at `0x80395840` in those builds' maps). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from

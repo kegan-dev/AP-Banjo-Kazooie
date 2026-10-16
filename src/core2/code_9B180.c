@@ -38,7 +38,18 @@ Struct_core2_9B180_0 D_8036DE00[6] = {
     {0x192, NULL, func_803221F4,          NULL, NULL}
 };
 
+#if BKBT
+/* Let Start skip the opening logos (both in map 0x1F) from the first boot:
+ * players of the hack have seen them. The first map holding prop 0x18 after
+ * power-on clears this flag and switches off that map's Start handler for the
+ * visit (func_803222F4). Starting at 0 is the state retail is in after that
+ * first visit, as after Save and Quit. Prop 0x18A shares the flag but is in
+ * no map.
+ */
+u8 D_8036DE78 = 0;
+#else
 u8 D_8036DE78 = 1;
+#endif
 
 /* .bss */
 u8 D_80383330;
