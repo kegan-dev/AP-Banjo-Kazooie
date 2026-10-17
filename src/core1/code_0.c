@@ -157,8 +157,20 @@ void func_8023DBDC(void) {
  * nothing depending on who clears which bss. */
 static bool sBkbtLaunched = FALSE;            /* this game was started by the launcher: bkbt_launched() */
 static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
-static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller */
+static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller; call it through bkbt_return */
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
+
+/* The Archipelago anchor (include/bkbt.h). Initialised data, so it is right from the first instruction:
+ * bkbt_init only has to publish its address. A global, so that the map carries it for the tools. */
+BkbtApAnchor bkbt_ap_anchor = {
+    BKBT_AP_MAGIC,
+    BKBT_AP_GAME_BK,
+    0,
+    sizeof(BkbtApAnchor),
+    BKBT_AP_VERSION_MAJOR,
+    BKBT_AP_VERSION_MINOR,
+    BKBT_AP_VERSION_PATCH
+};
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
  * tools that test a ROM: a test that expects the chord to do nothing proves nothing unless the game is
@@ -185,6 +197,7 @@ void bkbt_init(void) {
     payload = handoff[BKBT_HANDOFF_PAYLOAD];
     handoff[BKBT_HANDOFF_TOKEN] = 0;
     handoff[BKBT_HANDOFF_PAYLOAD] = 0;
+    *BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;
 
     if (token != (BKBT_TOKEN | (u32) bkbt_contract)) {
         return; /* standalone */
@@ -228,6 +241,16 @@ static bool bkbt_chordAllowed(void) {
         || getGameMode() == GAME_MODE_7_ATTRACT_DEMO;
 }
 
+/* The way back to Tooie. Whatever has to be undone before this game stops goes here, ahead of the call,
+ * which never returns. Today that is the anchor: from here until Tooie's boot publishes its own, the word
+ * would point into this game's RAM while no game is running, and a client writing through it then would
+ * write into memory the return launcher and Tooie are about to reuse. Tooie's launcher withdraws its
+ * anchor the same way before it starts this game (hack/bt/n64/asm/dualboot.asm). */
+static void bkbt_return(void) {
+    *BKBT_AP_ANCHOR = 0;
+    sBkbtReturnEntry();
+}
+
 /* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.
  * That is not once per drawn frame: two iterations run on the frame of a map change. */
 void bkbt_frame(void) {
@@ -269,14 +292,14 @@ void bkbt_frame(void) {
         countdown--;
         handoff[BKBT_HANDOFF_COUNTDOWN] = countdown;
         if (countdown == 0) {
-            sBkbtReturnEntry();
+            bkbt_return();
         }
     }
 
     /* Outside the modes that play recorded input, joy_update blanks pad 0's buttons for the game while L
      * and R are held (src/core1/joy.c:254-280), so the chord does not also pause or start a file. */
     if (down && sBkbtChordArmed && bkbt_chordAllowed()) {
-        sBkbtReturnEntry();
+        bkbt_return();
     }
 }
 #endif

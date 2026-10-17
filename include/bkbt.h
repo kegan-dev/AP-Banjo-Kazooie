@@ -85,4 +85,37 @@ bool bkbt_launched(void);          /* src/core1/code_0.c: TRUE when the Tooie la
 void bkbt_frame(void);             /* src/core1/code_0.c: once per mainLoop iteration */
 bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has not been read since boot */
 
+/* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
+ * reads or writes moves with every build, so the client starts from the one word that does not: physical
+ * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
+ * KSEG0 address of bkbt_ap_anchor while this game runs. Before that it holds 0 (the Tooie launcher
+ * clears it) or 0xFFFFFFFF (the IPL3's RAM test, in a ROM run by itself): neither is an address in RAM,
+ * and a client takes either as "not running". The Tooie hack publishes its own anchor in the same word.
+ * Stored through KSEG1, like the handoff block, so that no cached copy can be written back over it later. */
+#define BKBT_AP_ANCHOR ((volatile u32 *) 0xA0400000) /* physical 0x400000 through KSEG1 */
+
+#define BKBT_AP_MAGIC   0x424B4150 /* 'BKAP' */
+#define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
+/* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
+#define BKBT_AP_VERSION_MAJOR 0
+#define BKBT_AP_VERSION_MINOR 1
+#define BKBT_AP_VERSION_PATCH 0
+
+/* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
+ * else, and reads nothing at or past size: later features append fields, so an older client still
+ * reads a newer struct and a newer client sees from size what an older ROM has. magic comes first so
+ * that a Tooie client, which reads +0 as its version, refuses this struct before it follows a pointer.
+ * Big-endian, like everything the client reads. */
+typedef struct {
+    u32 magic;         /* +0x00: BKBT_AP_MAGIC */
+    u8 game_id;        /* +0x04: BKBT_AP_GAME_BK */
+    u8 padding;        /* +0x05: 0. Named so that the gap the u16 below needs is visible */
+    u16 size;          /* +0x06: sizeof(BkbtApAnchor) */
+    u16 version_major; /* +0x08 */
+    u8 version_minor;  /* +0x0A */
+    u8 version_patch;  /* +0x0B */
+} BkbtApAnchor;        /* 12 bytes */
+
+extern BkbtApAnchor bkbt_ap_anchor;
+
 #endif

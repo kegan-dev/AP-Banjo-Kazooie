@@ -62,6 +62,10 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 8. **Start skips the opening logos from the first boot** (2026-10-15): retail ignores Start on the logos
    after power-on and takes it only from the concert on. One initial value in `src/core2/code_9B180.c`,
    in every hack build ("The opening logos" below).
+9. **The Archipelago anchor** (2026-10-17; `docs/ROADMAP.md` of the BKBT repository, hack feature 1):
+   while the game runs, the word at physical `0x400000` holds the address of `bkbt_ap_anchor`, a 12-byte
+   struct by which an Archipelago client finds the game and its layout, by itself and in the dual-boot
+   image. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago anchor" below).
 
 ## The frame hook
 
@@ -108,7 +112,8 @@ caches: a cached access here passes every test and fails on a console.
 
 - Without the Expansion Pak (`osMemSize < 0x800000`) it returns before it touches anything: the block is
   above 4 MiB.
-- Otherwise it reads `+0x20` and `+0x24` and zeroes both, whatever they held.
+- Otherwise it reads `+0x20` and `+0x24` and zeroes both, whatever they held, and publishes the
+  Archipelago anchor, token or not ("The Archipelago anchor" below).
 - A wrong token means standalone, and nothing more happens. The token is what the trust rests on. A ROM
   started by itself, a reset of this game and RAM left behind by an earlier session all find no token,
   because every start consumes it. A payload that merely lies in RAM is never called, however valid its
@@ -171,6 +176,8 @@ What the entry can rely on, and what a change to these functions has to keep:
 
 - It is a plain o32 call with no arguments, on the main thread with interrupts on. The entry expects
   nothing in any register and does not come back.
+- Both triggers call it through `bkbt_return`, which first withdraws the Archipelago anchor (stores 0
+  at physical `0x400000`). Whatever else has to be undone before the game stops goes there too.
 - `bkbt_frame` runs once per `mainLoop` iteration. That is not once per drawn frame (two iterations run
   on the frame of a map change), and `gGlobalTimer` does not count iterations (the game resets it when an
   attract demo starts and freezes it in pause). The countdown counts iterations.
@@ -386,6 +393,86 @@ same build, and its matching build is the retail ROM (`hack/DUALBOOT.md` of the 
 logos, concert and title played in order. Not checked: a console; picture and sound were not judged by
 the tools.
 
+## The Archipelago anchor
+
+With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the KSEG0 address of
+`bkbt_ap_anchor`, a 12-byte struct that says which game runs and which layout it has. An Archipelago
+client starts from that word: everything else it will read moves with every build, and the word does
+not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
+runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
+none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
+
+- **The layout** (`include/bkbt.h:88-119`), big-endian like everything the client reads:
+
+  | Offset | Field | Value |
+  |---|---|---|
+  | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
+  | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
+  | `+0x05` | `u8 padding` | 0 |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 12 |
+  | `+0x08` | `u16 version_major` | 0 |
+  | `+0x0A` | `u8 version_minor` | 1 |
+  | `+0x0B` | `u8 version_patch` | 0 |
+
+  The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
+  version before it trusts anything else, and reads nothing at or past `size`. Later features append
+  their fields behind the 12 bytes (the settings of hack feature 2, the item queue and traps of 3, the
+  flags of 4, the dialog queue of 5, the exit map of 6, death link of 7, a destination for Phase 2), so
+  an older client still reads a newer struct and a newer client sees from `size` what an older ROM has.
+- **Why the magic comes first.** A Tooie client reads `+0` of whatever the word points to as its version,
+  a `u16` major, and stops before it follows a pointer when the major is neither 0 nor its own
+  (`Archipelago-BanjoTooie/worlds/banjo_tooie/BTClient.py:87-95`, `:1395-1401` of the BKBT repository).
+  Its signature test wants the word and the twelve words at `+0x04..+0x30` to be RDRAM addresses
+  (`validate_bt_signature`, `:97-124`). This struct fails that test (`+0x04` is not a pointer) and reads
+  as version 16971.65.80, so a stock Tooie client attached to the image stops with a version error when
+  BK starts and writes nothing (read in the client; the anchor check imitates both tests). A version at
+  `+0`, as the earlier sketch of the layout had it, would read as major 0, on which that client does not
+  stop.
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:163-173`), initialised data in core1's
+  `.data` that no code fills. `bkbt_init` stores its address, `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;`
+  (`:200`), after the `osMemSize` test and before the test of the launch token, so the anchor is
+  published on every boot, in a ROM run by itself (the standalone BK world needs it) and in the image
+  alike. `bkbt_return` (`:244-252`) stores 0 there and then calls the payload's entry; both triggers in
+  `bkbt_frame` go through it ("The frame hook").
+- **Through KSEG1** (`BKBT_AP_ANCHOR` is `(volatile u32 *) 0xA0400000`), for the handoff block's reason:
+  a cached copy of the line written back later would land on what the next game stored there. No
+  emulator models the caches; only a console shows a mistake here.
+- **Before it is published** the word reads `0xFFFFFFFF` in a ROM run by itself (the IPL3's RAM sizing
+  leaves that at `0x400000`, `0x400004`, `0x600000` and `0x600004`, and the game never uses the upper
+  4 MiB: its heap is a fixed array, `src/core1/memory.c:19-21`, `:189`) and 0 in the image (the Tooie
+  launcher withdraws Tooie's anchor, `hack/bt/n64/asm/dualboot.asm:312-318` of the BKBT repository).
+  Neither is an RDRAM address, and a client takes either as "not running".
+- **Withdrawn before the return.** From `bkbt_return` until Tooie's boot publishes its own, the word is 0.
+  Left in place it would point into this game's RAM while the return launcher and Tooie reuse it. Tooie's
+  old struct (at `0x8041DD78` in the normal Tooie build) is still there after a launch and still passes
+  the Tooie signature test, so the word, not the struct, is what keeps a Tooie client from writing into
+  this game.
+- **Without the Expansion Pak** nothing is published: `bkbt_init` has returned before.
+- **For the tools.** `bkbt_ap_anchor` is a global, so the map carries it; it moves with every build
+  (`0x80275BEC` with the struct alone, `0x80275C0C` once `bkbt_init` published it, `0x80275C2C` with
+  `bkbt_return`). The BKBT repository's `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses
+  a ROM whose core1 data does not read `'BKAP'` and `game_id` 1 at that symbol.
+- **What it costs.** 80 bytes of RAM headroom: lair, the largest level overlay, ends at `0x80395890`
+  instead of `0x80395840` (the map). The image builder counts 22,992 bytes of ROM room before the last
+  128 KiB, 22,864 before ("Rules for new code").
+
+Checked on mupen64plus with the BKBT repository's anchor check (`tools/bk_anchor_check.py`), on
+2026-10-17, recompiler: `--expect anchor` passed on the ROM by itself (4000 frames, through maps `0x1F`,
+`0x1E`, `0x02` and `0x22`; the struct read `424b41500100000c00000100`), on the autotest image (1500
+frames) and with `--reset-at 1000` (published again after the reset); and on a test image of the same
+build with the soak3 variant's Tooie hack (the owner's run, 1700 frames): published at frames 241, 782
+and 1323, 0 on BK's last frame before each return (540, 1081, 1622) and Tooie's `0x8041DD78` one frame
+later. A scratch build of the same design passed on the pure interpreter while the feature was prepared.
+With the struct in the build and nothing publishing it, the check failed on the ROM by itself with the
+word at `0xFFFFFFFF` (the owner's run). The round-trip check as it was failed on the published build,
+because it wanted the word 0 while BK runs, and passes with its new rule; the round trips, the
+anti-tamper, save, logo and new-game checks pass on the same build, and its matching build is the retail
+ROM (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). By hand, the owner reported on 2026-10-17
+that on Project64 3.0.1 and ares v148 the chord both ways, a save and a load in Banjo-Kazooie and the logo
+skip still work in the normal image of this build; the anchor cannot be seen by a player and was not read
+there. Not checked: a console, where the KSEG1 store matters; any client (none exists for BK yet, and
+EmuLoader has not attached by this word); any emulator but mupen64plus for the anchor itself.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -400,8 +487,9 @@ the tools.
 - **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
-  skip of 2026-10-15: the largest,
-  lair, ends at `0x80395840` in those builds' maps). Every level overlay is loaded at the end of core2
+  skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17: the largest, lair, ends at
+  `0x80395840` in the maps of 2026-10-14 and 2026-10-15 and at `0x80395890` in that of 2026-10-17, read
+  as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
@@ -420,7 +508,8 @@ the tools.
   the chord is not read from them, and a tool that wrote them would not reach it. The map being played
   and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals. Neither does
   what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
-  `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too. Two of those names
+  `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too, and so is the
+  Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"). Two of those names
   are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
   repository has to follow. The BKBT repository's new-game check reads more globals, by name from the
   map; several of those names were generated by the decomp too (its docstring lists them), and it stops
@@ -445,4 +534,5 @@ the tools.
     fill: at 64 MiB that is the top of the image, where some flashcarts keep save data. The image builder
     refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-14 the last compressed
     overlay ends at cart `0xFDA6B0`, 22,864 bytes below that line (23,504 in the build of 2026-10-12,
-    before the save device).
+    before the save device; 22,992 by the image builder's count in the build of 2026-10-17, with the
+    Archipelago anchor).
