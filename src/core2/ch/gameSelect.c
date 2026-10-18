@@ -12,6 +12,10 @@
 #define	ABS(d)		((d) >= 0) ? (d) : -(d)
 #endif
 
+#if BKBT
+#include "bkbt.h"
+#endif
+
 void debugScoreStates(void);
 void clearScoreStates(void);
 
@@ -491,8 +495,8 @@ void gameSelect_update(Actor *this) {
 
                     if (!gameFile_isNotEmpty(game_number)) { // New game
 #if BKBT
-                        /* Skip the intro cutscene for an empty game file in the
-                         * hack: players of the hack are already introduced to the
+                        /* The setting skip_intro decides, and the hack's default
+                         * skips: players of the hack are already introduced to the
                          * game and would get impatient waiting for it. The skip is
                          * safe: it goes where the intro ends (code_956B0.c:89),
                          * the same place a loaded save in Spiral Mountain goes,
@@ -501,7 +505,11 @@ void gameSelect_update(Actor *this) {
                          * arrival, which isn't saved, and a save loaded in Spiral
                          * Mountain doesn't show it either.
                          */
-                        timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_12_FROM_HOUSE, 1);
+                        if (bkbt_apSettings()->skip_intro) {
+                            timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_12_FROM_HOUSE, 1);
+                        } else {
+                            timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_85_CS_SPIRAL_MOUNTAIN_3, 0, 1);
+                        }
 #else
                         timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_85_CS_SPIRAL_MOUNTAIN_3, 0, 1);
 #endif
@@ -538,6 +546,15 @@ void gameSelect_update(Actor *this) {
                     } else {
                         coMusicPlayer_playMusic(COMUSIC_2C_BUZZER, 22000);
                     }
+#if BKBT
+                /* No game starts or loads before the client has written the
+                 * settings, so that none is played by the wrong ones: A gets
+                 * the buzzer of Z on an empty file. R held with A starts with
+                 * the defaults, for playing without a client; not L + R, which
+                 * blanks the other buttons (src/core1/joy.c). */
+                } else if (face_buttons[FACE_BUTTON(BUTTON_A)] == 1 && side_buttons[SIDE_BUTTON(BUTTON_R)] == 0 && !bkbt_apSettingsCommitted()) {
+                    coMusicPlayer_playMusic(COMUSIC_2C_BUZZER, 22000);
+#endif
                 } else if (face_buttons[FACE_BUTTON(BUTTON_A)] == 1) { // Select file
                     if (gameFile_isNotEmpty(game_number)) {
                         if (randf() < 0.1) { // Rarely activate "silly" animations

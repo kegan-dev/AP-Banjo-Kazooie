@@ -58,14 +58,21 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
-   intro" below).
+   intro" below). Since 2026-10-18 it is the setting `skip_intro`, on by default (item 10).
 8. **Start skips the opening logos from the first boot** (2026-10-15): retail ignores Start on the logos
    after power-on and takes it only from the concert on. One initial value in `src/core2/code_9B180.c`,
    in every hack build ("The opening logos" below).
 9. **The Archipelago anchor** (2026-10-17; `docs/ROADMAP.md` of the BKBT repository, hack feature 1):
    while the game runs, the word at physical `0x400000` holds the address of `bkbt_ap_anchor`, a 12-byte
-   struct by which an Archipelago client finds the game and its layout, by itself and in the dual-boot
-   image. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago anchor" below).
+   struct (16 since item 10) by which an Archipelago client finds the game and its layout, by itself and
+   in the dual-boot image. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago anchor" below).
+10. **The Archipelago settings, with the file-select refusal** (2026-10-18; `docs/ROADMAP.md` of the BKBT
+    repository, hack feature 2): `bkbt_ap_settings`, 8 bytes that the client writes and the game only
+    reads, found through the anchor's new `+0x0C` (layout 0.2.0). The seed is written last and commits
+    them. Until a client has, A on a file of the file select gets the buzzer, unless R is held with it,
+    which starts the game with the defaults. The first setting is the intro skip of item 7.
+    `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ch/gameSelect.c` ("The Archipelago settings"
+    below).
 
 ## The frame hook
 
@@ -291,17 +298,20 @@ itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by
 
 ## The new-game intro
 
-With `BKBT=1`, A on an empty game file no longer plays the intro, the cutscenes of Gruntilda and Tooty
-that come before the game. The game starts where they end, in Spiral Mountain at the exit from Banjo's
-house. There is no switch for it: every hack build skips, by itself and in the dual-boot image, and the
-matching build and the retail ROM play the intro. The owner asked for it on 2026-10-14. The boot sequence
-before the file select (logos, title screen, attract demo) is not changed by it ("The opening logos"
-below is a separate change).
+With `BKBT=1`, a new game on an empty game file no longer plays the intro, the cutscenes of Gruntilda
+and Tooty that come before the game. The game starts where they end, in Spiral Mountain at the exit from
+Banjo's house. The owner asked for it on 2026-10-14; until 2026-10-18 there was no switch for it. Since
+then it is the Archipelago setting `skip_intro` ("The Archipelago settings" below), on in the hack's
+defaults: every hack build skips, by itself and in the dual-boot image, unless a client has written
+`skip_intro` 0, and the matching build and the retail ROM play the intro. The boot sequence before the
+file select (logos, title screen, attract demo) is not changed by it ("The opening logos" below is a
+separate change).
 
 - **Where.** `gameSelect_update` in `src/core2/ch/gameSelect.c`, the new-game branch
-  (`!gameFile_isNotEmpty`), under `#if BKBT`: one `timedFunc_set_3` that asks `transitionToMap` for
-  `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE`. The `#else` is retail's call, which asks for
-  `MAP_85_CS_SPIRAL_MOUNTAIN_3`, the first intro map. The existing-game branch below it is not touched.
+  (`!gameFile_isNotEmpty`), under `#if BKBT` (`:497-515`): with `bkbt_apSettings()->skip_intro` set, one
+  `timedFunc_set_3` that asks `transitionToMap` for `MAP_1_SM_SPIRAL_MOUNTAIN` at
+  `WARP_SM_12_FROM_HOUSE`; with it 0, retail's call, which asks for `MAP_85_CS_SPIRAL_MOUNTAIN_3`, the
+  first intro map. The `#else` is retail's call alone. The existing-game branch below it is not touched.
 - **Why there.** Each intro map hands on to the next through `cutscenetrigger_update`
   (`src/core2/code_956B0.c:84-92`), and the last one, `MAP_89_CS_INTRO_BANJOS_HOUSE_2`, goes to
   `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE` (`:89`). A loaded game that has not reached the
@@ -323,8 +333,9 @@ below is a separate change).
 - **What it costs.** Nothing: the linker map of the build equals that of the build before it on every
   line that does not mention `.mdebug`, so no address moved, and the RAM headroom and the ROM room are
   what they were ("Rules for new code"). No new global, no new file.
-- **Turning it off.** If Archipelago should ever want the intro back, a setting would be read at this
-  same line (`docs/ROADMAP.md` of the BKBT repository, hack feature 8). Nothing reads one now.
+- **Turning it off.** A client writes `skip_intro` 0 and then the seed; a new game then asks for map
+  `0x85` as retail does (since 2026-10-18; the settings check, "The Archipelago settings" below;
+  `docs/ROADMAP.md` of the BKBT repository, hack feature 8). Without a client the default skips.
 
 Checked on mupen64plus with the BKBT repository's new-game check (`tools/bk_newgame_check.py`), on
 2026-10-14, in the dual-boot image (recompiler and pure interpreter) and on the ROM by itself: a new game
@@ -396,29 +407,33 @@ the tools.
 ## The Archipelago anchor
 
 With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the KSEG0 address of
-`bkbt_ap_anchor`, a 12-byte struct that says which game runs and which layout it has. An Archipelago
+`bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
+settings of 2026-10-18, "The Archipelago settings" below). An Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:88-119`), big-endian like everything the client reads:
+- **The layout** (`include/bkbt.h:103-135`), big-endian like everything the client reads, version 0.2.0
+  since 2026-10-18:
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 12 |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 16 (12 in 0.1.0) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 1 |
+  | `+0x0A` | `u8 version_minor` | 2 (1 in 0.1.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
+  | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. Later features append
-  their fields behind the 12 bytes (the settings of hack feature 2, the item queue and traps of 3, the
-  flags of 4, the dialog queue of 5, the exit map of 6, death link of 7, a destination for Phase 2), so
-  an older client still reads a newer struct and a newer client sees from `size` what an older ROM has.
+  their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
+  0.2.0; then the item queue and traps of 3, the flags of 4, the dialog queue of 5, the exit map of 6,
+  death link of 7, a destination for Phase 2), so an older client still reads a newer struct and a newer
+  client sees from `size` what an older ROM has.
 - **Why the magic comes first.** A Tooie client reads `+0` of whatever the word points to as its version,
   a `u16` major, and stops before it follows a pointer when the major is neither 0 nor its own
   (`Archipelago-BanjoTooie/worlds/banjo_tooie/BTClient.py:87-95`, `:1395-1401` of the BKBT repository).
@@ -428,11 +443,12 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   BK starts and writes nothing (read in the client; the anchor check imitates both tests). A version at
   `+0`, as the earlier sketch of the layout had it, would read as major 0, on which that client does not
   stop.
-- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:163-173`), initialised data in core1's
-  `.data` that no code fills. `bkbt_init` stores its address, `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;`
-  (`:200`), after the `osMemSize` test and before the test of the launch token, so the anchor is
-  published on every boot, in a ROM run by itself (the standalone BK world needs it) and in the image
-  alike. `bkbt_return` (`:244-252`) stores 0 there and then calls the payload's entry; both triggers in
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:195-206` in the build of 2026-10-18),
+  initialised data in core1's `.data` that no code fills. `bkbt_init` stores its address,
+  `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;` (`:233`), after the `osMemSize` test and before the test of
+  the launch token, so the anchor is published on every boot, in a ROM run by itself (the standalone BK
+  world needs it) and in the image alike. `bkbt_return` (`:277-285`) stores 0 there and then calls the
+  payload's entry; both triggers in
   `bkbt_frame` go through it ("The frame hook").
 - **Through KSEG1** (`BKBT_AP_ANCHOR` is `(volatile u32 *) 0xA0400000`), for the handoff block's reason:
   a cached copy of the line written back later would land on what the next game stored there. No
@@ -450,8 +466,9 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
 - **Without the Expansion Pak** nothing is published: `bkbt_init` has returned before.
 - **For the tools.** `bkbt_ap_anchor` is a global, so the map carries it; it moves with every build
   (`0x80275BEC` with the struct alone, `0x80275C0C` once `bkbt_init` published it, `0x80275C2C` with
-  `bkbt_return`). The BKBT repository's `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses
-  a ROM whose core1 data does not read `'BKAP'` and `game_id` 1 at that symbol.
+  `bkbt_return`, `0x80275C74` with the settings of 2026-10-18). The BKBT repository's
+  `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses a ROM whose core1 data does not read
+  `'BKAP'` and `game_id` 1 at that symbol.
 - **What it costs.** 80 bytes of RAM headroom: lair, the largest level overlay, ends at `0x80395890`
   instead of `0x80395840` (the map). The image builder counts 22,992 bytes of ROM room before the last
   128 KiB, 22,864 before ("Rules for new code").
@@ -473,6 +490,102 @@ skip still work in the normal image of this build; the anchor cannot be seen by 
 there. Not checked: a console, where the KSEG1 store matters; any client (none exists for BK yet, and
 EmuLoader has not attached by this word); any emulator but mupen64plus for the anchor itself.
 
+## The Archipelago settings
+
+With `BKBT=1` the game plays by settings that an Archipelago client writes: `bkbt_ap_settings`, an
+8-byte struct that the anchor points to from layout 0.2.0 on. This first version holds the seed of the
+generated game and one setting, `skip_intro`. Until a client has written them the file select refuses
+A, so that no game is started or loaded by the wrong settings; R held with A starts one with the hack's
+defaults, for playing without a client. There is no switch: every hack build, by itself and in the
+dual-boot image; the matching build has none of it. Done on 2026-10-18 (`docs/ROADMAP.md` of the BKBT
+repository, hack feature 2); the refusal with an escape, and the seed written last as the word that
+commits the rest, are the owner's decisions of 2026-10-17.
+
+- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:132`):
+
+  | Offset | Field | Value |
+  |---|---|---|
+  | `+0x00` | `u32 seed` | the generated game's seed; written last; 0 = not written since this boot |
+  | `+0x04` | `u8 skip_intro` | 1: a new game skips the intro, 0: it plays it ("The new-game intro") |
+  | `+0x05` | `u8 padding[3]` | 0 |
+
+  With the pointer the anchor grew to 16 bytes and its version to 0.2.0 (`BKBT_AP_VERSION_MINOR`,
+  `:116`): a ROM whose anchor says 0.1.0 or size 12 has no settings.
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_settings` (`:163-169`), initialised data in
+  core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:171-175`), `seed != 0`, the only place that
+  rule is written; `sBkbtApDefaults` (`:177-183`), `{0, TRUE, {0, 0, 0}}`, the hack's behaviour from
+  before settings existed; `bkbt_apSettings()` (`:185-193`), which returns `&bkbt_ap_settings` once
+  committed and the defaults until then. The anchor's initialiser ends with `&bkbt_ap_settings`
+  (`:205`), which the linker fills in. Game code reads settings only through `bkbt_apSettings`, so that
+  no reader sees a half-written struct or takes its zeros for values. Declarations: `include/bkbt.h:94`,
+  `:100-101`.
+- **Every boot starts at 0.** core1's `.data` is loaded again at every boot, a reset and each launch
+  from Tooie included, so after either the settings read 0 and the client has to write them again.
+- **The protocol, for the client** (none exists yet). One writer per region: the client writes the
+  settings, the game only reads them. The client writes every other field first and the seed last; to
+  change the settings in a running game it writes seed 0 first, then the fields, then the seed. The
+  Archipelago world must never generate seed 0 (the Tooie world draws `randint(12212, 9090763)`,
+  `Archipelago-BanjoTooie/worlds/banjo_tooie/__init__.py:1121` of the BKBT repository). The client
+  notices a boot by comparing the game's seed with its own, as the Tooie client does every 0.2 s
+  (`BTClient.py:1404-1418`), and then writes again. The Tooie client writes its seed first
+  (`client/game.py:169-171`), which leaves a moment in which the seed says written and the rest is not;
+  the order here avoids it. The client should read the anchor word and the magic again right before it
+  writes, as the Tooie client looks its pointer up again for every write (`game.py:111-130`).
+- **The refusal.** `gameSelect_update` in `src/core2/ch/gameSelect.c`, state `GAME_SELECT_IDLE`, under
+  `#if BKBT` (`:549-557`): a branch ahead of retail's A branch, taken when A is pressed
+  (`face_buttons` 1), R is not held (`side_buttons` 0) and `!bkbt_apSettingsCommitted()`, plays
+  `COMUSIC_2C_BUZZER` at 22000, retail's buzzer for Z on an empty file, and does nothing else. Retail's
+  lines are unchanged. It covers loading an existing file and starting a new game alike; Z (erase) is
+  not gated. `bkbt.h` is included under `#if BKBT` at the top (`:15-17`). No text is shown in this
+  version (the Tooie hack shows some): a player without a client hears only the buzzer.
+- **The escape: R held with A** falls through to retail's branch and starts with the defaults. R
+  because it is free on the file select (read elsewhere only by the player states), because R alone
+  does not trigger the blanking that L + R does (`src/core1/joy.c:254-278`), and because Z opens the
+  erase prompt. The Tooie hack's escape is L + R held (`hack/bt/n64/src/main.c:716-733` of the BKBT
+  repository), which here would blank A.
+- **The first setting.** In the new-game branch (`:497-515`), `if (bkbt_apSettings()->skip_intro)`
+  chooses between `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE` and retail's
+  `MAP_85_CS_SPIRAL_MOUNTAIN_3` ("The new-game intro").
+- **After an R start.** A client that commits later switches `bkbt_apSettings` to its values for every
+  later read. That changes nothing for `skip_intro`, which is read once, at the start; a setting read
+  during play will have to say what it means.
+- **Not done: binding the seed to the save.** The Tooie hack keeps the seed in each save file and refuses
+  a file of another seed (`save_data.custom[n].seed`, `hack/bt/n64/src/main.c:716-733`). BK's
+  standalone EEPROM has no room for it; in the image `0x7200..` of the SRAM could hold it. Deferred.
+- **Not `volatile`.** The game reads the settings through a function call at the moment it acts on
+  them, and relies on IDO keeping no copy across such a call (read, not tested). A client that wrote by
+  DMA would also meet the cache on a console; untried.
+- **What it costs.** 208 bytes of RAM headroom: lair ends at `0x80395960` instead of `0x80395890` (the
+  map). The image builder counts 22,800 bytes of ROM room before the last 128 KiB, 22,992 before ("Rules
+  for new code"). In the build of 2026-10-18 `bkbt_ap_settings` is at `0x80275C6C` and the anchor at
+  `0x80275C74`; both move with every build.
+
+Checked on mupen64plus with the BKBT repository's settings check (`tools/bk_settings_check.py`, a stand-in
+client that finds the settings through the anchor and writes `skip_intro` and then the seed), on
+2026-10-18, recompiler unless said: without a client, `--expect refused` passed on the autotest image (A
+at BK+388, +629 and +870, nothing asked for); a client from boot that wrote `skip_intro` 0 got the
+intro on the autotest image; on the ROM by itself a client that wrote only after a refused A
+(`--client after-a`) got the intro on the next A, and without a client R with A (`--escape`) started a
+game that skipped the intro, on the pure interpreter. While the feature was built (the owner's runs): R
+with A asked for map `0x01` exit `0x12` at BK+420, a client's `skip_intro` 0 for map `0x85` at BK+420,
+entered at +448; with a reset at BK+200 the settings read 0 at +201, the client wrote them again at
++204 and the intro followed (+564, +592); on the soak3 image (`--frames 1700 --expect boots`) the
+settings read 0 at each of three launches (BK+0, +541, +1082) and the client wrote once per launch (+0,
++546, +1086). On the way: with the header changed alone the ROM stayed `d5685068...`; with the struct
+and the pointer, the anchor check of layout 0.1.0 failed ("size 16 version 0.2.0 (want ... 12,
+0.1.0)"), and a client's `skip_intro` 0 still got the skip, because nothing read the settings; with the
+game reading the struct directly a new game without a client played the intro, as the owner predicted
+(zero is not a default); with the refusal and before the escape the new-game check as it was failed (no
+request after its A). The anchor check of layout 0.2.0 (8 lines, the `+0x0C` pointer among them), the
+round trips, the anti-tamper, save, logo and new-game checks (the save and new-game checks now hold R
+with A) pass on the same build, and its matching build is the retail ROM (`hack/DUALBOOT.md` of the BKBT
+repository, "Checked"). By hand, the owner reported on 2026-10-18 that on Project64 3.0.1 and ares v148,
+in the normal image of this build, A alone on a file got the buzzer, R + A on an empty file started a
+new game with the intro skipped, R + A on an existing file loaded it, A alone still buzzed after a
+switch to Tooie and back, and the chord both ways and the logo skip still worked. Values from a client
+were not tried by hand: there is none, and it would take a memory editor. Not checked: a console; a
+real client or EmuLoader; the buzzer, which no tool listens for.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -487,9 +600,10 @@ EmuLoader has not attached by this word); any emulator but mupen64plus for the a
 - **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
-  skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17: the largest, lair, ends at
-  `0x80395840` in the maps of 2026-10-14 and 2026-10-15 and at `0x80395890` in that of 2026-10-17, read
-  as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
+  skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
+  settings of 2026-10-18: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
+  2026-10-15, at `0x80395890` in that of 2026-10-17 and at `0x80395960` in that of 2026-10-18, read as
+  `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
@@ -509,7 +623,8 @@ EmuLoader has not attached by this word); any emulator but mupen64plus for the a
   and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals. Neither does
   what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
   `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too, and so is the
-  Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"). Two of those names
+  Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"), and its settings, `bkbt_ap_settings`
+  ("The Archipelago settings"; the anchor check compares the anchor's `+0x0C` with it). Two of those names
   are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
   repository has to follow. The BKBT repository's new-game check reads more globals, by name from the
   map; several of those names were generated by the decomp too (its docstring lists them), and it stops
@@ -535,4 +650,4 @@ EmuLoader has not attached by this word); any emulator but mupen64plus for the a
     refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-14 the last compressed
     overlay ends at cart `0xFDA6B0`, 22,864 bytes below that line (23,504 in the build of 2026-10-12,
     before the save device; 22,992 by the image builder's count in the build of 2026-10-17, with the
-    Archipelago anchor).
+    Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings).

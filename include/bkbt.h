@@ -80,10 +80,25 @@ typedef struct {
     u16 button;  /* +4: OSContPad.button */
 } BkbtPad;
 
+/* The settings of the generated game (hack feature 2). The client writes them and this game only reads
+ * them: one writer. The client writes every other field first and the seed last, so a seed that is not 0
+ * means the rest is complete; it starts from seed 0 to change them in a running game. The Archipelago
+ * world never generates a seed of 0. Every boot starts them at 0 (they are initialised data), so after a
+ * reset or a launch from Tooie the client sees seed 0 and writes them again. */
+typedef struct {
+    u32 seed;       /* +0x00: the generated game's seed; written last; 0 = not written since this boot */
+    u8 skip_intro;  /* +0x04: 1 = a new game skips the intro, 0 = it plays it */
+    u8 padding[3];  /* +0x05: 0. Named, so that the size the u32 rounds the struct up to is visible */
+} BkbtApSettings;   /* 8 bytes */
+
+extern BkbtApSettings bkbt_ap_settings;
+
 void bkbt_init(void);              /* src/core1/code_0.c: first thing in core1_init */
 bool bkbt_launched(void);          /* src/core1/code_0.c: TRUE when the Tooie launcher started this game */
 void bkbt_frame(void);             /* src/core1/code_0.c: once per mainLoop iteration */
 bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has not been read since boot */
+const BkbtApSettings *bkbt_apSettings(void); /* src/core1/code_0.c: the settings to play by, the client's or the defaults */
+bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once the client has written the settings since boot */
 
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
@@ -98,7 +113,7 @@ bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has n
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 1
+#define BKBT_AP_VERSION_MINOR 2
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -107,14 +122,15 @@ bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has n
  * that a Tooie client, which reads +0 as its version, refuses this struct before it follows a pointer.
  * Big-endian, like everything the client reads. */
 typedef struct {
-    u32 magic;         /* +0x00: BKBT_AP_MAGIC */
-    u8 game_id;        /* +0x04: BKBT_AP_GAME_BK */
-    u8 padding;        /* +0x05: 0. Named so that the gap the u16 below needs is visible */
-    u16 size;          /* +0x06: sizeof(BkbtApAnchor) */
-    u16 version_major; /* +0x08 */
-    u8 version_minor;  /* +0x0A */
-    u8 version_patch;  /* +0x0B */
-} BkbtApAnchor;        /* 12 bytes */
+    u32 magic;                  /* +0x00: BKBT_AP_MAGIC */
+    u8 game_id;                 /* +0x04: BKBT_AP_GAME_BK */
+    u8 padding;                 /* +0x05: 0. Named so that the gap the u16 below needs is visible */
+    u16 size;                   /* +0x06: sizeof(BkbtApAnchor) */
+    u16 version_major;          /* +0x08 */
+    u8 version_minor;           /* +0x0A */
+    u8 version_patch;           /* +0x0B */
+    BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
+} BkbtApAnchor;                 /* 16 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
 

@@ -160,6 +160,38 @@ static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
 static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller; call it through bkbt_return */
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
 
+/* The Archipelago settings (include/bkbt.h): the client writes them, the game only reads them. All 0, so
+ * at every boot they read as not written yet; the anchor points here from the first instruction. */
+BkbtApSettings bkbt_ap_settings = {
+    0,
+    0,
+    {0, 0, 0}
+};
+
+/* TRUE once the client has written the settings since this boot: it writes the seed last, and a seed is
+ * never 0 (include/bkbt.h). The only place that rule is written down. */
+bool bkbt_apSettingsCommitted(void) {
+    return bkbt_ap_settings.seed != 0;
+}
+
+/* What the game plays by while no client has committed: the hack's own behaviour before settings existed.
+ * Only bkbt_apSettings hands it out. */
+static const BkbtApSettings sBkbtApDefaults = {
+    0,
+    TRUE,
+    {0, 0, 0}
+};
+
+/* The settings the game plays by: the client's once committed, the defaults until then. Game code reads
+ * settings only through here, so that no reader sees a half-written struct or takes its zeros for values. */
+const BkbtApSettings *bkbt_apSettings(void) {
+    if (bkbt_apSettingsCommitted()) {
+        return &bkbt_ap_settings;
+    }
+
+    return &sBkbtApDefaults;
+}
+
 /* The Archipelago anchor (include/bkbt.h). Initialised data, so it is right from the first instruction:
  * bkbt_init only has to publish its address. A global, so that the map carries it for the tools. */
 BkbtApAnchor bkbt_ap_anchor = {
@@ -169,7 +201,8 @@ BkbtApAnchor bkbt_ap_anchor = {
     sizeof(BkbtApAnchor),
     BKBT_AP_VERSION_MAJOR,
     BKBT_AP_VERSION_MINOR,
-    BKBT_AP_VERSION_PATCH
+    BKBT_AP_VERSION_PATCH,
+    &bkbt_ap_settings
 };
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
