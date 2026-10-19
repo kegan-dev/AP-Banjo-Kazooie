@@ -7,6 +7,7 @@
 #include "version.h"
 #if BKBT
 #include "bkbt.h"
+#include "core2/abilityprogress.h"
 #endif
 
 s32 D_80275610 = 0; // always set to 0
@@ -192,6 +193,45 @@ const BkbtApSettings *bkbt_apSettings(void) {
     return &sBkbtApDefaults;
 }
 
+/* The Archipelago items (include/bkbt.h): written by the client, read by the game, all 0 at every boot. */
+BkbtApItems bkbt_ap_items = { { 0 } };
+
+/* mainLoop iterations on which bkbt_frame copied the items from the client. For the
+ * tools that test a ROM: a test that expects items not to be copied proves nothing unless the game is
+ * shown to have applied items. The one static here that is not initialised: a tool reaches it through
+ * the pointer below and checks that against this file's .bss (BKBT.md, "Exports for tools"). core1_main
+ * clears it at every boot. */
+static u32 sBkbtApItemPasses;
+u32 *bkbt_ptr_ap_item_passes = &sBkbtApItemPasses;
+
+static bool bkbt_apItemsAllowed(void) {
+    enum map_e map;
+    s32 gameMode;
+
+    map = gsworld_getMap();
+    gameMode = getGameMode();
+    return bkbt_apSettingsCommitted() &&
+        map != MAP_1E_CS_START_NINTENDO &&
+        map != MAP_1F_CS_START_RAREWARE &&
+        map != MAP_91_FILE_SELECT &&
+        map != MAP_8E_GL_FURNACE_FUN &&
+        gameMode == GAME_MODE_3_NORMAL;
+}
+
+static void bkbt_apApplyItems(void) {
+    u8 moveIx;
+
+    if (!bkbt_apItemsAllowed()) {
+        return;
+    }
+
+    for (moveIx = 0; moveIx < BKBT_AP_MOVE_COUNT; moveIx++) {
+        ability_setLearned(moveIx, bkbt_ap_items.moves[moveIx] != 0);
+    }
+
+    sBkbtApItemPasses++;
+}
+
 /* The Archipelago anchor (include/bkbt.h). Initialised data, so it is right from the first instruction:
  * bkbt_init only has to publish its address. A global, so that the map carries it for the tools. */
 BkbtApAnchor bkbt_ap_anchor = {
@@ -202,7 +242,8 @@ BkbtApAnchor bkbt_ap_anchor = {
     BKBT_AP_VERSION_MAJOR,
     BKBT_AP_VERSION_MINOR,
     BKBT_AP_VERSION_PATCH,
-    &bkbt_ap_settings
+    &bkbt_ap_settings,
+    &bkbt_ap_items
 };
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
@@ -291,6 +332,9 @@ void bkbt_frame(void) {
     u32 countdown;
     u16 button;
     bool down;
+
+    /* Sync the moves with the AP client every frame */
+    bkbt_apApplyItems();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the

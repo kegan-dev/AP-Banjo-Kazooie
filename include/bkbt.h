@@ -100,6 +100,19 @@ bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has n
 const BkbtApSettings *bkbt_apSettings(void); /* src/core1/code_0.c: the settings to play by, the client's or the defaults */
 bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once the client has written the settings since boot */
 
+/* The items the player has received (hack feature 3; version 1: moves). The client writes them and this
+ * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
+ * nothing new; what the game has already given is kept in its own save. The seed commits these as well:
+ * the client writes the settings and the items first and the seed last, and starts from seed 0 to change
+ * them in a running game. Every boot starts them at 0, like the settings. */
+#define BKBT_AP_MOVE_COUNT 20 /* the values of enum ability_e, 0..0x13 (include/core2/abilityprogress.h) */
+
+typedef struct {
+    u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
+} BkbtApItems;                    /* 20 bytes; only u8, so no padding */
+
+extern BkbtApItems bkbt_ap_items;
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -113,7 +126,7 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 2
+#define BKBT_AP_VERSION_MINOR 3
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -130,7 +143,8 @@ typedef struct {
     u8 version_minor;           /* +0x0A */
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
-} BkbtApAnchor;                 /* 16 bytes */
+    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0) */
+} BkbtApAnchor;                 /* 20 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
 

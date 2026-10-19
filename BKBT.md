@@ -64,15 +64,23 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    in every hack build ("The opening logos" below).
 9. **The Archipelago anchor** (2026-10-17; `docs/ROADMAP.md` of the BKBT repository, hack feature 1):
    while the game runs, the word at physical `0x400000` holds the address of `bkbt_ap_anchor`, a 12-byte
-   struct (16 since item 10) by which an Archipelago client finds the game and its layout, by itself and
-   in the dual-boot image. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago anchor" below).
+   struct (16 since item 10, 20 since item 11) by which an Archipelago client finds the game and its
+   layout, by itself and in the dual-boot image. `include/bkbt.h`, `src/core1/code_0.c` ("The
+   Archipelago anchor" below).
 10. **The Archipelago settings, with the file-select refusal** (2026-10-18; `docs/ROADMAP.md` of the BKBT
     repository, hack feature 2): `bkbt_ap_settings`, 8 bytes that the client writes and the game only
     reads, found through the anchor's new `+0x0C` (layout 0.2.0). The seed is written last and commits
-    them. Until a client has, A on a file of the file select gets the buzzer, unless R is held with it,
-    which starts the game with the defaults. The first setting is the intro skip of item 7.
-    `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ch/gameSelect.c` ("The Archipelago settings"
-    below).
+    them (and, since item 11, the items). Until a client has, A on a file of the file select gets the
+    buzzer, unless R is held with it, which starts the game with the defaults. The first setting is the
+    intro skip of item 7. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ch/gameSelect.c` ("The
+    Archipelago settings" below).
+11. **The Archipelago items, version 1: moves** (2026-10-18; `docs/ROADMAP.md` of the BKBT repository,
+    hack feature 3): `bkbt_ap_items`, 20 bytes, one per move, that the client writes and the game only
+    reads, found through the anchor's new `+0x10` (layout 0.3.0). While the seed is committed and a file
+    is played, `bkbt_frame` makes the game's 20 learned-move bits the mirror of them on every main-loop
+    iteration: a move sent is learned, a move not sent is unlearned. Known issue until hack feature 4:
+    with a client, a molehill whose move was not sent cannot keep it, and the jump lesson in Spiral
+    Mountain softlocks. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago items" below).
 
 ## The frame hook
 
@@ -84,7 +92,8 @@ Two functions in `src/core1/code_0.c` do it, with the layout in `include/bkbt.h`
 
 - `bkbt_init()` is the first statement of `core1_init`. It decides once per boot whether a return exists.
 - `bkbt_frame()` is called by `mainLoop` on every iteration, after the optional `joy_update` and before
-  `baMotor_80250C08`. It decides when to return.
+  `baMotor_80250C08`. It decides when to return. Since 2026-10-18 its first statement applies the
+  Archipelago items ("The Archipelago items" below), which has nothing to do with the return.
 
 The return itself is not in this ROM. It is the entry of a payload that the Tooie hack's launcher loads
 into Expansion Pak RAM before it starts this game: the return launcher, which contains no address of this
@@ -145,8 +154,10 @@ A header field never changes its meaning under the same magic.
 
 ### `bkbt_frame`
 
-It does two things: on every iteration it looks at the chord, and when there is a return entry it decides
-whether to call it. Without an entry nothing is called and the handoff block is not even read.
+It does two things for the return (since 2026-10-18 its first statement applies the Archipelago items,
+"The Archipelago items", which is not part of this contract): on every iteration it looks at the chord,
+and when there is a return entry it decides whether to call it. Without an entry nothing is called and
+the handoff block is not even read.
 
 - **Countdown.** If `+0x28` is not zero it is decremented and stored, and when it has reached zero the
   entry is called. It is stored before the call, so the word reads 0 from then on.
@@ -408,32 +419,34 @@ the tools.
 
 With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the KSEG0 address of
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
-settings of 2026-10-18, "The Archipelago settings" below). An Archipelago
+settings of 2026-10-18, "The Archipelago settings" below, and 20 since the items of the same day, "The
+Archipelago items"). An Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:103-135`), big-endian like everything the client reads, version 0.2.0
-  since 2026-10-18:
+- **The layout** (`include/bkbt.h:116-149`), big-endian like everything the client reads, version 0.3.0
+  since the items of 2026-10-18 (0.2.0 with the settings of that day):
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 16 (12 in 0.1.0) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 20 (12 in 0.1.0, 16 in 0.2.0) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 2 (1 in 0.1.0) |
+  | `+0x0A` | `u8 version_minor` | 3 (1 in 0.1.0, 2 in 0.2.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
+  | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
-  0.2.0; then the item queue and traps of 3, the flags of 4, the dialog queue of 5, the exit map of 6,
-  death link of 7, a destination for Phase 2), so an older client still reads a newer struct and a newer
-  client sees from `size` what an older ROM has.
+  0.2.0, and the items pointer of 3 second, in 0.3.0; then traps, the flags of 4, the dialog queue of 5,
+  the exit map of 6, death link of 7, a destination for Phase 2), so an older client still reads a newer
+  struct and a newer client sees from `size` what an older ROM has.
 - **Why the magic comes first.** A Tooie client reads `+0` of whatever the word points to as its version,
   a `u16` major, and stops before it follows a pointer when the major is neither 0 nor its own
   (`Archipelago-BanjoTooie/worlds/banjo_tooie/BTClient.py:87-95`, `:1395-1401` of the BKBT repository).
@@ -443,11 +456,11 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   BK starts and writes nothing (read in the client; the anchor check imitates both tests). A version at
   `+0`, as the earlier sketch of the layout had it, would read as major 0, on which that client does not
   stop.
-- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:195-206` in the build of 2026-10-18),
-  initialised data in core1's `.data` that no code fills. `bkbt_init` stores its address,
-  `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;` (`:233`), after the `osMemSize` test and before the test of
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:235-247` in the items' build of
+  2026-10-18), initialised data in core1's `.data` that no code fills. `bkbt_init` stores its address,
+  `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;` (`:274`), after the `osMemSize` test and before the test of
   the launch token, so the anchor is published on every boot, in a ROM run by itself (the standalone BK
-  world needs it) and in the image alike. `bkbt_return` (`:277-285`) stores 0 there and then calls the
+  world needs it) and in the image alike. `bkbt_return` (`:318-326`) stores 0 there and then calls the
   payload's entry; both triggers in
   `bkbt_frame` go through it ("The frame hook").
 - **Through KSEG1** (`BKBT_AP_ANCHOR` is `(volatile u32 *) 0xA0400000`), for the handoff block's reason:
@@ -466,7 +479,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
 - **Without the Expansion Pak** nothing is published: `bkbt_init` has returned before.
 - **For the tools.** `bkbt_ap_anchor` is a global, so the map carries it; it moves with every build
   (`0x80275BEC` with the struct alone, `0x80275C0C` once `bkbt_init` published it, `0x80275C2C` with
-  `bkbt_return`, `0x80275C74` with the settings of 2026-10-18). The BKBT repository's
+  `bkbt_return`, `0x80275C74` with the settings of 2026-10-18, `0x80275DAC` with the items of that day).
+  The BKBT repository's
   `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses a ROM whose core1 data does not read
   `'BKAP'` and `game_id` 1 at that symbol.
 - **What it costs.** 80 bytes of RAM headroom: lair, the largest level overlay, ends at `0x80395890`
@@ -501,7 +515,7 @@ dual-boot image; the matching build has none of it. Done on 2026-10-18 (`docs/RO
 repository, hack feature 2); the refusal with an escape, and the seed written last as the word that
 commits the rest, are the owner's decisions of 2026-10-17.
 
-- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:132`):
+- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:145`):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -510,13 +524,13 @@ commits the rest, are the owner's decisions of 2026-10-17.
   | `+0x05` | `u8 padding[3]` | 0 |
 
   With the pointer the anchor grew to 16 bytes and its version to 0.2.0 (`BKBT_AP_VERSION_MINOR`,
-  `:116`): a ROM whose anchor says 0.1.0 or size 12 has no settings.
-- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_settings` (`:163-169`), initialised data in
-  core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:171-175`), `seed != 0`, the only place that
-  rule is written; `sBkbtApDefaults` (`:177-183`), `{0, TRUE, {0, 0, 0}}`, the hack's behaviour from
-  before settings existed; `bkbt_apSettings()` (`:185-193`), which returns `&bkbt_ap_settings` once
-  committed and the defaults until then. The anchor's initialiser ends with `&bkbt_ap_settings`
-  (`:205`), which the linker fills in. Game code reads settings only through `bkbt_apSettings`, so that
+  `:129`, 3 since the items): a ROM whose anchor says 0.1.0 or size 12 has no settings.
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_settings` (`:164-170`), initialised data in
+  core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:172-176`), `seed != 0`, the only place that
+  rule is written; `sBkbtApDefaults` (`:178-184`), `{0, TRUE, {0, 0, 0}}`, the hack's behaviour from
+  before settings existed; `bkbt_apSettings()` (`:186-194`), which returns `&bkbt_ap_settings` once
+  committed and the defaults until then. The anchor's initialiser holds `&bkbt_ap_settings` (`:245`),
+  which the linker fills in. Game code reads settings only through `bkbt_apSettings`, so that
   no reader sees a half-written struct or takes its zeros for values. Declarations: `include/bkbt.h:94`,
   `:100-101`.
 - **Every boot starts at 0.** core1's `.data` is loaded again at every boot, a reset and each launch
@@ -551,14 +565,16 @@ commits the rest, are the owner's decisions of 2026-10-17.
   during play will have to say what it means.
 - **Not done: binding the seed to the save.** The Tooie hack keeps the seed in each save file and refuses
   a file of another seed (`save_data.custom[n].seed`, `hack/bt/n64/src/main.c:716-733`). BK's
-  standalone EEPROM has no room for it; in the image `0x7200..` of the SRAM could hold it. Deferred.
+  standalone EEPROM has no room for it; in the image `0x7200..` of the SRAM could hold it. Deferred;
+  since the items it is a risk ("The Archipelago items").
 - **Not `volatile`.** The game reads the settings through a function call at the moment it acts on
   them, and relies on IDO keeping no copy across such a call (read, not tested). A client that wrote by
   DMA would also meet the cache on a console; untried.
 - **What it costs.** 208 bytes of RAM headroom: lair ends at `0x80395960` instead of `0x80395890` (the
   map). The image builder counts 22,800 bytes of ROM room before the last 128 KiB, 22,992 before ("Rules
-  for new code"). In the build of 2026-10-18 `bkbt_ap_settings` is at `0x80275C6C` and the anchor at
-  `0x80275C74`; both move with every build.
+  for new code"). In the settings' build of 2026-10-18 `bkbt_ap_settings` is at `0x80275C6C` and the
+  anchor at `0x80275C74`; both move with every build (`0x80275D8C` and `0x80275DAC` in the items' build
+  of that day).
 
 Checked on mupen64plus with the BKBT repository's settings check (`tools/bk_settings_check.py`, a stand-in
 client that finds the settings through the anchor and writes `skip_intro` and then the seed), on
@@ -586,6 +602,144 @@ switch to Tooie and back, and the chord both ways and the logo skip still worked
 were not tried by hand: there is none, and it would take a memory editor. Not checked: a console; a
 real client or EmuLoader; the buzzer, which no tool listens for.
 
+## The Archipelago items
+
+With `BKBT=1` the game gives the player what an Archipelago client says was received: `bkbt_ap_items`,
+a 20-byte struct that the anchor points to from layout 0.3.0 on. This first version holds the moves
+only, one byte per move; the counted kinds (honeycombs, notes, tokens, jiggies, jinjos) and traps are to
+come (`docs/ROADMAP.md` of the BKBT repository, hack feature 3). The client writes totals, as the Tooie
+client writes counts of what was received (`docs/upstream-banjo-tooie.md` of the BKBT repository), and
+the game makes its learned moves the mirror of them: while the seed is committed and a file is played,
+on every main-loop iteration, a move sent is learned and a move not sent is unlearned. There is no
+switch: every hack build, by itself and in the dual-boot image; the matching build has none of it. Done
+on 2026-10-18 (hack feature 3, version 1); the mirrored totals, one byte per move indexed by the game's
+own ability numbers, and a client that always sends moves 3 and `0x13`, are the owner's decisions of
+that day. **Known issue until hack feature 4: with a client attached, the Spiral Mountain molehill that
+teaches the jumps softlocks** (below).
+
+- **The layout** (`include/bkbt.h:103-114`), behind the anchor's `+0x10` (`:146`):
+
+  | Offset | Field | Value |
+  |---|---|---|
+  | `+0x00` | `u8 moves[20]` | indexed by `enum ability_e` (`include/core2/abilityprogress.h:23-44`: 0 barge to `0x13` the first note door); not 0 = received, 0 = not |
+
+  `BKBT_AP_MOVE_COUNT` is 20 (`:108`); only `u8`, so no padding. With the pointer the anchor grew to 20
+  bytes and its version to 0.3.0 (`BKBT_AP_VERSION_MINOR`, `:129`): a ROM whose anchor says 0.2.0 or
+  size 16 has no items.
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_items` (`:196-197`), initialised data in core1's
+  `.data`, all 0; `bkbt_apItemsAllowed()` (`:207-219`), the gate (below); `bkbt_apApplyItems()`
+  (`:221-233`), which returns unless the gate allows and otherwise calls `ability_setLearned(i,
+  moves[i] != 0)` for each i below `BKBT_AP_MOVE_COUNT` and counts the pass. It is the first statement
+  of `bkbt_frame` (`:336-337`), so it runs once per `mainLoop` iteration, ahead of the chord.
+  `core2/abilityprogress.h` is included under `#if BKBT` at the top (`:8-11`). The anchor's initialiser
+  ends with `&bkbt_ap_items` (`:246`). Declaration: `include/bkbt.h:114`.
+- **The mirror.** `ability_setLearned` (`src/core2/abilityprogress.c:114-120`) sets or clears one bit of
+  `learnedAbilities` and does nothing else: no dialog, no sound, no flag. So a received move is there
+  without Bottles' lesson, and a move the client has not sent is unlearned on the next iteration,
+  whoever taught it. Bits 20 to 31 of the word are not touched: nothing reads them, and in the hack build
+  only writers of the whole word reach them (the attract demos set every bit,
+  `src/core2/code_C4320.c:210`; Furnace Fun keeps a copy, clears the word on its board and puts the copy
+  back, `src/lair/code_5ED0.c:660`, `:956`, `:1086`). What the game has been given stays in its save:
+  the learned word is saved with each game (`ability_getSizeAndPtr`, `abilityprogress.c:131-134`; at
+  `0x6A` of the record laid out by `savedata_init`, `src/core2/code_B5040.c:95-131`).
+- **The gate** (`bkbt_apItemsAllowed`). The items are applied only while the settings are committed
+  (`bkbt_apSettingsCommitted()`, the seed not 0), the map is none of `MAP_1E_CS_START_NINTENDO` (the
+  concert), `MAP_1F_CS_START_RAREWARE` (the logos), `MAP_91_FILE_SELECT` and `MAP_8E_GL_FURNACE_FUN`,
+  and the game mode is `GAME_MODE_3_NORMAL`. So not in the front end, not in the attract demos (mode 7),
+  in pause (4) or in the other modes that play recorded input (8, 9, 10), and not on the Furnace Fun
+  board, where the mirror would give back the moves the board takes away (read, not run). Without the
+  seed test a save loaded with R and no client lost every move, and saved that; without the map and
+  mode tests the items were applied on the logos, the title, the attract demos, the file select and in
+  pause (the owner's runs, below).
+- **What taking a move back does to a move in use** (read). Almost every move is checked only when it
+  starts (`src/core2/bainput.c:8-66`; in `src/core2/`: `bs/stand.c:70`, `bs/walk.c:99-102`,
+  `bs/crouch.c:183`, `bs/bFly.c:299`, `bs/swim.c:247`, `ba/marker.c:735-805`), so one taken back while
+  in use finishes. Two are checked on every frame: the high jump (`bs/jump.c:102`: a high jump taken
+  back is cut short) and climbing (`climb.c:56-61`, `bs/climb.c:94-126`: the player lets go). Run: claw
+  swipe taken back at control+50, in a swipe that had started at +42; the swipe ended at +81, and B at
+  +100 no longer swiped. No path to a crash was found.
+- **The protocol, for the client.** The seed commits the items as it commits the settings: **the client
+  writes the settings and the items first and the seed last, and to change either in a running game it
+  writes seed 0 first, then the fields, then the seed.** The game cannot see the order, so the client's
+  order is the only defence: with the seed first, a client that arrives while a file is played makes the
+  game commit to moves all 0 and unlearn what it had received until the moves arrive (the items check's
+  `--bad-order`: claw swipe unlearned at BK+505..+510, learned again at +511). Every boot starts the
+  items at 0 (initialised data), a reset and each launch from Tooie included, and the client writes them
+  again with the settings. The client sends every move the player should have, the ones the world does
+  not shuffle included: the mirror unlearns every move it does not send.
+- **Moves 3 and `0x13`: the client always sends them.** The game mirrors all 20 bits, and these two are
+  sent always, like every move the world does not shuffle (the owner's decision of 2026-10-18). Camera
+  control (3) is taught by Bottles' first molehill (`src/SM/ch/smbottles.c:65`, `:325-328`) and read by
+  nothing (`can_control_camera`, `src/core2/playerutils.c:31-32`, has no caller). The first note door
+  (`0x13`) is checked by every note door (`src/lair/lairspawnqueue.c:971`) and taught by a molehill
+  (`src/core2/ch/mole.c:66`, `:257-258`): not sent, no note door opens. Shuffling either later needs
+  logic work; BK_Randomizer shuffles neither (its molehill shuffle covers nine moves,
+  `docs/upstream-bk-randomizer.md:75-77` of the BKBT repository).
+- **Without a client** (R held with A) the seed stays 0, nothing is applied, the save's moves stay and
+  the molehills teach as in retail. A client that commits later, during play, makes the moves the
+  mirror from then on (the items check's `--client control`), and the next save keeps that.
+- **Known issue: the molehills under a client** (until hack feature 4). A molehill whose move the client
+  has not sent teaches it (`player_unlockAbility`), and on the next iteration the mirror unlearns it, so
+  every talk plays the lesson for a new move, not the refresher, with what that lesson hands out
+  (`src/core2/ch/mole.c:238-264`, `src/SM/ch/smbottles.c:304-328`; read). Found by the owner's hand
+  test of 2026-10-18: the Spiral Mountain molehill that teaches the jumps, where Bottles asks for a tall
+  jump, softlocks. The lesson teaches the high jump, the next iteration the mirror unlearns it (the
+  stand-in client sent only 3, 4 and `0x13`), and because the high jump is checked on every frame
+  (`bs/jump.c:102`) only the short jump happens, so the lesson cannot be completed. Camera control's
+  lesson was tried too and is harmless; the other molehills were not tried. Hack feature 4 is the fix:
+  the molehills become locations, and a stand-in dialog takes the place of the lesson.
+- **Not done: binding the seed to the save** ("The Archipelago settings"). With the items it is a risk:
+  a save of another seed, or one played without a client, loaded while this slot's client runs, gets
+  this slot's moves mirrored into it, and its next save keeps them.
+- **A map-flag hazard** (read, not run). The first high jump, flap and flip (`ability_setUsedWithDialog`,
+  `src/core2/abilityprogress.c:25-38`) set Spiral Mountain's map flags 8, 9 and `0xA` without looking at
+  the map. In retail those moves are taught in Spiral Mountain and first used there; one received
+  elsewhere can be first used elsewhere, and then sets id 8, 9 or `0xA` in that map's flags. What those
+  ids mean in the other maps was not looked at.
+- **For the tools: the pass counter.** `sBkbtApItemPasses` (`:199-205`) counts the iterations on which
+  the items were applied, exported as `bkbt_ptr_ap_item_passes` ("Exports for tools"): a test that
+  expects the items not to be applied somewhere proves nothing unless the game is shown to apply them
+  elsewhere. The items check judges by it that no pass falls on the logos, the concert, the file select,
+  a mode other than 3 or a seed of 0.
+- **What it costs.** 320 bytes of RAM headroom: lair ends at `0x80395AA0` instead of `0x80395960` (the
+  map). The image builder counts 22,592 bytes of ROM room before the last 128 KiB, 22,800 before ("Rules
+  for new code"). In the items' build of 2026-10-18 `bkbt_ap_items` is at `0x80275D94`,
+  `bkbt_ptr_ap_item_passes` at `0x80275DA8` and the anchor at `0x80275DAC`; all move with every build.
+
+Checked on mupen64plus with the BKBT repository's items check (`tools/bk_items_check.py`, a stand-in
+client that finds the settings and the items through the anchor and writes `skip_intro`, the moves and
+then the seed, again after every boot), on 2026-10-18. On this build: a client from boot that sent claw
+swipe, on the ROM by itself on the pure interpreter (`--expect granted`: learned at control+10, B
+swiped, the saved record had it), and on the soak3 image (`--frames 1700 --expect boots`: the items read
+0 at every launch and the client wrote them again). While the feature was built (the owner's runs,
+recompiler, the ROM by itself unless said): with the struct and the pointer alone the anchor check of
+layout 0.2.0 failed ("size 20 version 0.3.0"), and `granted` and `cleared` failed while `kept` passed,
+because nothing read the items; with the mirror and no gate `granted` and `cleared` passed, `kept`
+failed (learned `0x00001010` became 0 after the load, and was saved) and a client that never wrote the
+seed (`--no-seed`) got its move at BK+449; with the seed test everything passed: claw swipe granted; a
+save with claw swipe and roll and a client that sent claw swipe lost roll, and the record kept claw
+swipe only (`cleared`); the same save without a client, R with A, kept both (`kept`); a client that came
+during play in the right order granted within 2 frames of its commit with nothing lost on the way, and
+in the wrong order showed the window above; with the pass counter the gate run failed, with passes on
+102 frames of the logos, 2,535 of the title and the attract demos (mode 7), 161 of the file select and
+97 of pause (mode 4); with the map and mode tests (the last step, with this build's addresses) it passed
+through 2,500 frames of attract demos and the pause menu with 377 passes, every one while a file was
+played; saved, reset and loaded with the same client kept claw swipe; claw swipe taken back during play
+(`--unreceive 4`) was unlearned within 2 frames and the record kept roll only; and in a test image of
+the build claw swipe was granted with the record in the SRAM, a new emulator from that save with the
+same client kept it, and one with a client that sent nothing cleared it.
+The anchor check of layout 0.3.0 (9 lines, the `+0x10` pointer among them; also on the soak3 image), the
+round trips, the anti-tamper, save, logo, new-game and settings checks pass on the same build, and its
+matching build is the retail ROM (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). By hand, the
+owner reported on 2026-10-18 that on Project64 3.0.1 and ares v148, in the normal image of this build,
+without a client everything behaved as retail does (the molehills taught); that the BKBT repository's
+stand-in client `tools/bk_hand_client.py`, sending moves 3, 4 and `0x13`, attached and wrote on both
+emulators, the first time a client wrote into this game there; that the attract demos did not take its
+moves; that loading a game set the learned moves to exactly what it sent; and that the jump molehill
+softlocked, as described above. Not checked: Furnace Fun (read, not run), Bottles' bonus game (mode 8),
+the map-flag hazard, a console (the game reads what the client writes through KSEG0), and a real
+client: none exists for this game yet.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -601,8 +755,9 @@ real client or EmuLoader; the buzzer, which no tool listens for.
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
-  settings of 2026-10-18: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
-  2026-10-15, at `0x80395890` in that of 2026-10-17 and at `0x80395960` in that of 2026-10-18, read as
+  settings of 2026-10-18 and 65,888 with the Archipelago items of that day: the largest, lair, ends at
+  `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
+  `0x80395960` in that of the settings and at `0x80395AA0` in that of the items, read as
   `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
@@ -615,16 +770,21 @@ real client or EmuLoader; the buzzer, which no tool listens for.
   address from the moment the segment is loaded, and it must not become an uninitialised global ahead of
   a checksum slot (above). Only in core1 and core2, which are always in RAM; the level overlays share one
   address and are there one at a time. Today: `bkbt_ptr_pad` (`sBkbtPad`, the pad record that the chord
-  is read from) in `src/core1/joy.c`, `bkbt_ptr_chord_seen` (`sBkbtChordSeen`, the chord counter) in
-  `src/core1/code_0.c`, `bkbt_ptr_ucode` (`sUcodeData`, the rspboot buffer) in `src/core1/ucode.c`. The
-  statics they point to are uninitialised, so each lies in its file's `.bss`, and core1 clears its bss
-  at every boot. The game's own pad arrays (`sInputs`, `sInputsPrimary`) are not exported any more:
-  the chord is not read from them, and a tool that wrote them would not reach it. The map being played
+  is read from) in `src/core1/joy.c`, `bkbt_ptr_chord_seen` (`sBkbtChordSeen`, the chord counter) and,
+  since 2026-10-18, `bkbt_ptr_ap_item_passes` (`sBkbtApItemPasses`, the count of iterations that applied
+  the Archipelago items, "The Archipelago items") in `src/core1/code_0.c`, `bkbt_ptr_ucode`
+  (`sUcodeData`, the rspboot buffer) in `src/core1/ucode.c`. The statics they point to are
+  uninitialised, so each lies in its file's `.bss`, and core1 clears its bss at every boot. The items
+  check takes `bkbt_ptr_ap_item_passes` from the map; `tools/bk_fork_info.py` does not export it. The
+  game's own pad arrays (`sInputs`, `sInputsPrimary`) are not exported any more: the chord is not read
+  from them, and a tool that wrote them would not reach it. The map being played
   and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals. Neither does
   what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
   `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too, and so is the
-  Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"), and its settings, `bkbt_ap_settings`
-  ("The Archipelago settings"; the anchor check compares the anchor's `+0x0C` with it). Two of those names
+  Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"), its settings, `bkbt_ap_settings`
+  ("The Archipelago settings"; the anchor check compares the anchor's `+0x0C` with it), and its items,
+  `bkbt_ap_items` ("The Archipelago items"; the anchor check compares the anchor's `+0x10` with it), and
+  the game's own `learnedAbilities`, which the items check reads. Two of those names
   are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
   repository has to follow. The BKBT repository's new-game check reads more globals, by name from the
   map; several of those names were generated by the decomp too (its docstring lists them), and it stops
@@ -650,4 +810,5 @@ real client or EmuLoader; the buzzer, which no tool listens for.
     refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-14 the last compressed
     overlay ends at cart `0xFDA6B0`, 22,864 bytes below that line (23,504 in the build of 2026-10-12,
     before the save device; 22,992 by the image builder's count in the build of 2026-10-17, with the
-    Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings).
+    Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings; 22,592 in that with
+    the Archipelago items, later that day).
