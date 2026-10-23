@@ -196,6 +196,10 @@ const BkbtApSettings *bkbt_apSettings(void) {
 /* The Archipelago items (include/bkbt.h): written by the client, read by the game, all 0 at every boot. */
 BkbtApItems bkbt_ap_items = { { 0 } };
 
+/* The Archipelago locations (include/bkbt.h): written by the game (the molehills, src/core2/ch/mole.c and
+ * src/SM/ch/smbottles.c), read by the client, all 0 at every boot. */
+BkbtApLocations bkbt_ap_locations = { { 0 } };
+
 /* mainLoop iterations on which bkbt_frame copied the items from the client. For the
  * tools that test a ROM: a test that expects items not to be copied proves nothing unless the game is
  * shown to have applied items. The one static here that is not initialised: a tool reaches it through
@@ -243,7 +247,8 @@ BkbtApAnchor bkbt_ap_anchor = {
     BKBT_AP_VERSION_MINOR,
     BKBT_AP_VERSION_PATCH,
     &bkbt_ap_settings,
-    &bkbt_ap_items
+    &bkbt_ap_items,
+    &bkbt_ap_locations
 };
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the

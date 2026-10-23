@@ -4,6 +4,10 @@
 
 #include "core2/abilityprogress.h"
 
+#if BKBT
+#include "bkbt.h"
+#endif
+
 /* extern functions */
 Actor *func_802D94B4(ActorMarker *, Gfx **, Mtx **, Vtx **);
 void func_8028E668(f32 *, f32, f32, f32);
@@ -304,7 +308,15 @@ void __chSmBottles_textCallback(ActorMarker *marker, enum asset_e text_id, s32 a
 void __chSmBottles_getRefresherDialog(Actor *this, s32 *text_id, s32 *text_flags) {
     // Selects the learn and refresh dialogs.
     // Gives the player the ability if not learned.
+#if BKBT
+    /* Whether this molehill's location is checked, not whether its move is known, picks the
+     * first-visit text or the refresher. The intro and bridge Bottles have ability -1 in the table:
+     * skip them, or the index would fall outside the array. */
+    if (chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability != -1 &&
+        bkbt_ap_locations.moves[chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability] != 0) {
+#else
     if (player_isAbilityUnlocked(chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability)) {
+#endif
         if (fileProgressFlag_get(FILEPROG_DB_SKIPPED_TUTORIAL)) {
             *text_id = chSmBottlesDialogIndex + ASSET_E0A_DIALOG_BOTTLES_REFUSE_HELP_1;
             chSmBottlesDialogIndex++;
@@ -325,7 +337,15 @@ void __chSmBottles_getRefresherDialog(Actor *this, s32 *text_id, s32 *text_flags
     }
     else {//L803895C0
         *text_id = chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].teach_text_id;
+#if BKBT
+        /* Check the location instead of teaching the move; the move comes as an item. Not for ability
+         * -1 (the intro and bridge Bottles), which would write outside the array. */
+        if (chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability != -1) {
+            bkbt_ap_locations.moves[chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability] = TRUE;
+        }
+#else
         player_unlockAbility(chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability);
+#endif
     }
 }
 
@@ -387,6 +407,16 @@ void __chSmBottles_talk(Actor *this) {
             break;
 
         case CH_SM_MOLE_ID_4_ATTACK_TUTORIAL://L80389848
+#if BKBT
+            /* These are the moves unlocked by the tutorial. Set them here and
+             * break so that the refresher dialog plays for the attack tutorial */
+            bkbt_ap_locations.moves[ABILITY_4_CLAW_SWIPE] = TRUE;
+            bkbt_ap_locations.moves[ABILITY_C_ROLL] = TRUE;
+            bkbt_ap_locations.moves[ABILITY_B_RATATAT_RAP] = TRUE;
+            __chSmBottles_getRefresherDialog(this, &text_id, &text_flags);
+            mapSpecificFlags_set(SM_SPECIFIC_FLAG_4, TRUE);
+            break;
+#endif
             if (!(player_isAbilityUnlocked(ABILITY_4_CLAW_SWIPE) && player_isAbilityUnlocked(ABILITY_C_ROLL) && player_isAbilityUnlocked(ABILITY_B_RATATAT_RAP))) {//L803898D4
                 mapSpecificFlags_set(SM_SPECIFIC_FLAG_4, TRUE);
             }
@@ -396,6 +426,15 @@ void __chSmBottles_talk(Actor *this) {
             break;
 
         case CH_SM_MOLE_ID_6_JUMP_TUTORIAL://L803898A0
+#if BKBT
+            /* These are the moves unlocked by the tutorial. Set them here and
+             * break so that the refresher dialog plays for the jump tutorial */
+            bkbt_ap_locations.moves[ABILITY_8_FLAP_FLIP] = TRUE;
+            bkbt_ap_locations.moves[ABILITY_A_HOLD_A_JUMP_HIGHER] = TRUE;
+            bkbt_ap_locations.moves[ABILITY_7_FEATHERY_FLAP] = TRUE;
+            __chSmBottles_getRefresherDialog(this, &text_id, &text_flags);
+            break;
+#endif
             if (!(player_isAbilityUnlocked(ABILITY_A_HOLD_A_JUMP_HIGHER) && player_isAbilityUnlocked(ABILITY_7_FEATHERY_FLAP) && player_isAbilityUnlocked(ABILITY_8_FLAP_FLIP))) {//L803898D4
                 mapSpecificFlags_set(SM_SPECIFIC_FLAG_E, TRUE);
             }
@@ -477,6 +516,17 @@ void chSmBottles_update(Actor *this) {
             }
         }//L80389AC8
 
+#if BKBT
+        /* Set flags for all abilities learned. This allows the player into the
+         * lair without all of the moves and prevents bottles from stopping the
+         * player at the beginning of the game to ask about skipping an
+         * unskippable part of the game now */
+        mapSpecificFlags_set(SM_SPECIFIC_FLAG_1_TALKED_TO_BOTTLES, TRUE);
+        mapSpecificFlags_set(SM_SPECIFIC_FLAG_3_ALL_SM_ABILITIES_LEARNED, TRUE);
+        mapSpecificFlags_set(SM_SPECIFIC_FLAG_2, TRUE);
+        mapSpecificFlags_set(SM_SPECIFIC_FLAG_C, TRUE);
+        mapSpecificFlags_set(SM_SPECIFIC_FLAG_F, TRUE);
+#else
         if (__chSmBottles_isAnySpiralMountainAbilityLearned()) {
             mapSpecificFlags_set(SM_SPECIFIC_FLAG_1_TALKED_TO_BOTTLES, TRUE);
 
@@ -487,6 +537,7 @@ void chSmBottles_update(Actor *this) {
                 mapSpecificFlags_set(SM_SPECIFIC_FLAG_F, TRUE);
             }
         }
+#endif
     }//L80389B20
 
     if (!this->volatile_initialized) {
@@ -526,7 +577,14 @@ void chSmBottles_update(Actor *this) {
                     break;
                 }
 
+#if BKBT
+                /* Key bottles popping out on the location check rather than the
+                 * move being known. This is an indication to the player the
+                 * location was already checked */
+                sp34 = (chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability + 1) && bkbt_ap_locations.moves[chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability] != 0;
+#else
                 sp34 = (chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability + 1) && player_isAbilityUnlocked(chSmBottlesDialogTable[this->actorTypeSpecificField - SM_BOTTLES_ID_TO_TABLE_SHIFT].ability);
+#endif
 
                 if (!sp34 && this->actorTypeSpecificField != CH_SM_MOLE_ID_1_INTRO || fileProgressFlag_get(FILEPROG_DB_SKIPPED_TUTORIAL) == FALSE || chSmBottlesDialogIndex < 6) {
                     if (this->actorTypeSpecificField != CH_SM_MOLE_ID_8_BRIDGE || !fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY)) {
@@ -625,12 +683,21 @@ void chSmBottles_update(Actor *this) {
 
                 if (bakey_pressed != -1) {
                     fileProgressFlag_set(FILEPROG_DB_SKIPPED_TUTORIAL, bakey_pressed ? 0 : 1);
+#if BKBT
+                    /* This shouldn't be reachable anymore, but the skip offer
+                     * cannot be accepted by the player so the dialog indicates
+                     * that no matter what choice they made. Future build tools
+                     * for dialog modifications will allow this to be more
+                     * cleanly indicated to the player */
+                    gcdialog_showDialog(ASSET_E07_DIALOG_BOTTLES_UNKNOWN, 0xe, this->position, this->marker, __chSmBottles_textCallback, __chSmBottles_textActions);
+#else
                     gcdialog_showDialog(bakey_pressed ? ASSET_E07_DIALOG_BOTTLES_UNKNOWN : ASSET_E09_DIALOG_BOTTLES_SKIPPED_TUTORIAL, 0xe, this->position, this->marker, __chSmBottles_textCallback,__chSmBottles_textActions);
 
                     if (!bakey_pressed) {
                         __chSmBottles_skipIntroTutorial();
                     }
-
+#endif
+                    
                     this->unk38_0 = FALSE;
                 }
                 else if (!this->has_met_before && 5.0 < this->lifetime_value) {

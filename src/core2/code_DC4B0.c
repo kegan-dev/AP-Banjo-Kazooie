@@ -31,6 +31,17 @@ void func_803634BC(void){
 }
 
 void func_80363500(Actor *this){
+#if BKBT
+    /* Despawn the broken bridge. Ensure it follows the way the game fixes the
+     * bridge. Essential to allow progress without the full list of spiral mountain
+     * moves */
+    if(!this->volatile_initialized){
+        func_80363440();
+        marker_despawn(this->marker);
+        this->volatile_initialized = TRUE;
+        return;
+    }
+#endif
     if(!this->volatile_initialized){
         if(!chmole_learnedAllSpiralMountainAbilities()){
             func_803634BC();

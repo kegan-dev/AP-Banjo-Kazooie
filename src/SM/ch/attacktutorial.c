@@ -156,6 +156,13 @@ static void __chAttackTutorial_update(Actor *this) {
 
     switch(this->state) {
         case CH_ATTACK_TUTORIAL_STATE_1_UNKNOWN:
+#if BKBT
+            /* Skip the tutorial (its moves are locations now, smbottles.c): state 4 spawns the
+             * Colliwobble at once, so its honeycomb can be collected without the lesson. Killing it
+             * still takes an attack move, which the world's logic has to require. */
+            __chAttackTutorial_setState(this, CH_ATTACK_TUTORIAL_STATE_4_TUTORIAL_COMPLETED);
+            break;
+#endif
             if (mapSpecificFlags_get(SM_SPECIFIC_FLAG_4))
                 __chAttackTutorial_setState(this, CH_ATTACK_TUTORIAL_STATE_5_SHOW_LEARN_MOVE_DIALOG);
             

@@ -2,6 +2,10 @@
 #include "functions.h"
 #include "variables.h"
 
+#if BKBT
+#include "bkbt.h"
+#endif
+
 void chmole_update(Actor *this);
 Actor *func_802D94B4(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx);
 void chmole_additionalAbilityLearnActions(ActorMarker *marker, enum asset_e arg1, s32 arg2);
@@ -239,7 +243,14 @@ int chmole_learnAbility(Actor *this){
     s32 teach_text_id;
     s32 sp28 = 0xe;
     // Known Ability: Refresher Dialog
+#if BKBT
+    /* Whether this molehill's location is checked, not whether its move is known, picks the lesson
+     * text (first visit) or the refresher, so a molehill whose move the client already sent still
+     * gives its check. */
+    if(bkbt_ap_locations.moves[(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)] != 0){
+#else
     if(player_isAbilityUnlocked(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)){
+#endif
         sp28 = 0xf;
         teach_text_id = moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].refresher_text_id;
     }//L802D99EC
@@ -248,7 +259,14 @@ int chmole_learnAbility(Actor *this){
         func_80347A14(0);
         this->has_met_before = TRUE;
         teach_text_id = moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].teach_text_id;
+#if BKBT
+        /* Mark the location as checked instead of unlocking the move so that AP
+         * sees a new check occurred. Also will give reminder text next time
+         * this molehill is visited */
+        bkbt_ap_locations.moves[(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)] = TRUE;
+#else
         player_unlockAbility(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability);
+#endif
         switch(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability){
             case ABILITY_9_FLIGHT:
             case ABILITY_D_SHOCK_JUMP:
@@ -315,7 +333,14 @@ void func_802D9C90(Actor *this){
 void chmole_startingDialog(Actor *this){
     // If the player knows the ability, use refresher function
     // Otherwise, set player's position and spawn mole
+#if BKBT
+    /* Check the AP locations rather than the moves the player knows to
+     * determine if this molehill has been visited already. Refresher dialog
+     * indicates to the player the check was already sent */
+    if(bkbt_ap_locations.moves[(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)] != 0){
+#else
     if(player_isAbilityUnlocked(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)){
+#endif
         chmole_Refresher(this);
     }
     else{
@@ -394,10 +419,17 @@ void chmole_update(Actor *this){
             this->yaw_ideal = subaddie_getYawToPlayer(this);
             subaddie_turnToYaw(this, 4.0f);
             if(player_isStableWithExtraSteps() && player_isBanjoOrWishywashy() && !func_8028EC04()){
+#if BKBT
+                if( this->actorTypeSpecificField == CH_MOLE_ID_12_OPEN_NOTEDOORS 
+                    && bkbt_ap_locations.moves[moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability] == 0
+                    && (player_movementGroup() == BSGROUP_0_NONE || player_movementGroup() == BSGROUP_8_TROT)
+                ){
+#else
                 if( this->actorTypeSpecificField == CH_MOLE_ID_12_OPEN_NOTEDOORS 
                     && !player_isAbilityUnlocked(moleTable[this->actorTypeSpecificField - MOLE_ID_TO_TABLE_SHIFT].ability)
                     && (player_movementGroup() == BSGROUP_0_NONE || player_movementGroup() == BSGROUP_8_TROT)
                 ){
+#endif
                     player_getPosition(sp34);
                     if (ml_vec3f_distance(sp34, this->velocity) < this->actor_specific_1_f) {
                         chmole_startingDialog(this);

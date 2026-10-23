@@ -64,8 +64,8 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    in every hack build ("The opening logos" below).
 9. **The Archipelago anchor** (2026-10-17; `docs/ROADMAP.md` of the BKBT repository, hack feature 1):
    while the game runs, the word at physical `0x400000` holds the address of `bkbt_ap_anchor`, a 12-byte
-   struct (16 since item 10, 20 since item 11) by which an Archipelago client finds the game and its
-   layout, by itself and in the dual-boot image. `include/bkbt.h`, `src/core1/code_0.c` ("The
+   struct (16 since item 10, 20 since item 11, 24 since item 12) by which an Archipelago client finds the
+   game and its layout, by itself and in the dual-boot image. `include/bkbt.h`, `src/core1/code_0.c` ("The
    Archipelago anchor" below).
 10. **The Archipelago settings, with the file-select refusal** (2026-10-18; `docs/ROADMAP.md` of the BKBT
     repository, hack feature 2): `bkbt_ap_settings`, 8 bytes that the client writes and the game only
@@ -78,9 +78,17 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     hack feature 3): `bkbt_ap_items`, 20 bytes, one per move, that the client writes and the game only
     reads, found through the anchor's new `+0x10` (layout 0.3.0). While the seed is committed and a file
     is played, `bkbt_frame` makes the game's 20 learned-move bits the mirror of them on every main-loop
-    iteration: a move sent is learned, a move not sent is unlearned. Known issue until hack feature 4:
-    with a client, a molehill whose move was not sent cannot keep it, and the jump lesson in Spiral
-    Mountain softlocks. `include/bkbt.h`, `src/core1/code_0.c` ("The Archipelago items" below).
+    iteration: a move sent is learned, a move not sent is unlearned. Its known issue, the jump lesson
+    in Spiral Mountain softlocking under a client, is resolved by item 12. `include/bkbt.h`,
+    `src/core1/code_0.c` ("The Archipelago items" below).
+12. **Molehills as Archipelago locations** (2026-10-22; `docs/ROADMAP.md` of the BKBT repository, hack
+    feature 4, first part): `bkbt_ap_locations`, 20 bytes, one per move, that the game writes and the
+    client only reads, found through the anchor's new `+0x14` (layout 0.4.0). A molehill's first talk
+    sets its move's byte instead of teaching the move, which comes only as an item, and the byte, not
+    the move, picks the lesson text or the refresher. Spiral Mountain's tutorials are gone and its
+    bridge is always open. No client gate: R + A plays the same way. RAM only for now. `include/bkbt.h`,
+    `src/core1/code_0.c`, `src/core2/ch/mole.c`, `src/SM/ch/smbottles.c`, `src/SM/ch/attacktutorial.c`,
+    `src/SM/smspawnqueue.c`, `src/core2/code_DC4B0.c` ("Molehills as Archipelago locations" below).
 
 ## The frame hook
 
@@ -419,34 +427,38 @@ the tools.
 
 With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the KSEG0 address of
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
-settings of 2026-10-18, "The Archipelago settings" below, and 20 since the items of the same day, "The
-Archipelago items"). An Archipelago
+settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
+Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"). An
+Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:116-149`), big-endian like everything the client reads, version 0.3.0
-  since the items of 2026-10-18 (0.2.0 with the settings of that day):
+- **The layout** (`include/bkbt.h:129-163`), big-endian like everything the client reads, version 0.4.0
+  since the molehills of 2026-10-22 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
+  day):
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 20 (12 in 0.1.0, 16 in 0.2.0) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 3 (1 in 0.1.0, 2 in 0.2.0) |
+  | `+0x0A` | `u8 version_minor` | 4 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
+  | `+0x14` | `BkbtApLocations *locations` | `&bkbt_ap_locations`, which the game writes and the client reads (since 0.4.0; "Molehills as Archipelago locations") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
-  0.2.0, and the items pointer of 3 second, in 0.3.0; then traps, the flags of 4, the dialog queue of 5,
-  the exit map of 6, death link of 7, a destination for Phase 2), so an older client still reads a newer
-  struct and a newer client sees from `size` what an older ROM has.
+  0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
+  traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
+  for Phase 2), so an older client still reads a newer struct and a newer client sees from `size` what
+  an older ROM has.
 - **Why the magic comes first.** A Tooie client reads `+0` of whatever the word points to as its version,
   a `u16` major, and stops before it follows a pointer when the major is neither 0 nor its own
   (`Archipelago-BanjoTooie/worlds/banjo_tooie/BTClient.py:87-95`, `:1395-1401` of the BKBT repository).
@@ -456,11 +468,11 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   BK starts and writes nothing (read in the client; the anchor check imitates both tests). A version at
   `+0`, as the earlier sketch of the layout had it, would read as major 0, on which that client does not
   stop.
-- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:235-247` in the items' build of
-  2026-10-18), initialised data in core1's `.data` that no code fills. `bkbt_init` stores its address,
-  `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;` (`:274`), after the `osMemSize` test and before the test of
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_anchor` (`:239-252` in the molehills' build of
+  2026-10-22), initialised data in core1's `.data` that no code fills. `bkbt_init` stores its address,
+  `*BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;` (`:279`), after the `osMemSize` test and before the test of
   the launch token, so the anchor is published on every boot, in a ROM run by itself (the standalone BK
-  world needs it) and in the image alike. `bkbt_return` (`:318-326`) stores 0 there and then calls the
+  world needs it) and in the image alike. `bkbt_return` (`:323-331`) stores 0 there and then calls the
   payload's entry; both triggers in
   `bkbt_frame` go through it ("The frame hook").
 - **Through KSEG1** (`BKBT_AP_ANCHOR` is `(volatile u32 *) 0xA0400000`), for the handoff block's reason:
@@ -479,8 +491,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
 - **Without the Expansion Pak** nothing is published: `bkbt_init` has returned before.
 - **For the tools.** `bkbt_ap_anchor` is a global, so the map carries it; it moves with every build
   (`0x80275BEC` with the struct alone, `0x80275C0C` once `bkbt_init` published it, `0x80275C2C` with
-  `bkbt_return`, `0x80275C74` with the settings of 2026-10-18, `0x80275DAC` with the items of that day).
-  The BKBT repository's
+  `bkbt_return`, `0x80275C74` with the settings of 2026-10-18, `0x80275DAC` with the items of that day,
+  `0x80275DC0` with the molehills of 2026-10-22). The BKBT repository's
   `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses a ROM whose core1 data does not read
   `'BKAP'` and `game_id` 1 at that symbol.
 - **What it costs.** 80 bytes of RAM headroom: lair, the largest level overlay, ends at `0x80395890`
@@ -515,7 +527,7 @@ dual-boot image; the matching build has none of it. Done on 2026-10-18 (`docs/RO
 repository, hack feature 2); the refusal with an escape, and the seed written last as the word that
 commits the rest, are the owner's decisions of 2026-10-17.
 
-- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:145`):
+- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:158`):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -524,12 +536,13 @@ commits the rest, are the owner's decisions of 2026-10-17.
   | `+0x05` | `u8 padding[3]` | 0 |
 
   With the pointer the anchor grew to 16 bytes and its version to 0.2.0 (`BKBT_AP_VERSION_MINOR`,
-  `:129`, 3 since the items): a ROM whose anchor says 0.1.0 or size 12 has no settings.
+  `:142`, 3 since the items, 4 since the locations): a ROM whose anchor says 0.1.0 or size 12 has no
+  settings.
 - **Where.** `src/core1/code_0.c`: the global `bkbt_ap_settings` (`:164-170`), initialised data in
   core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:172-176`), `seed != 0`, the only place that
   rule is written; `sBkbtApDefaults` (`:178-184`), `{0, TRUE, {0, 0, 0}}`, the hack's behaviour from
   before settings existed; `bkbt_apSettings()` (`:186-194`), which returns `&bkbt_ap_settings` once
-  committed and the defaults until then. The anchor's initialiser holds `&bkbt_ap_settings` (`:245`),
+  committed and the defaults until then. The anchor's initialiser holds `&bkbt_ap_settings` (`:249`),
   which the linker fills in. Game code reads settings only through `bkbt_apSettings`, so that
   no reader sees a half-written struct or takes its zeros for values. Declarations: `include/bkbt.h:94`,
   `:100-101`.
@@ -566,7 +579,8 @@ commits the rest, are the owner's decisions of 2026-10-17.
 - **Not done: binding the seed to the save.** The Tooie hack keeps the seed in each save file and refuses
   a file of another seed (`save_data.custom[n].seed`, `hack/bt/n64/src/main.c:716-733`). BK's
   standalone EEPROM has no room for it; in the image `0x7200..` of the SRAM could hold it. Deferred;
-  since the items it is a risk ("The Archipelago items").
+  since the items it is a risk ("The Archipelago items"), since the locations a larger one, and it is
+  the next feature (the owner's decision of 2026-10-22, "Molehills as Archipelago locations").
 - **Not `volatile`.** The game reads the settings through a function call at the moment it acts on
   them, and relies on IDO keeping no copy across such a call (read, not tested). A client that wrote by
   DMA would also meet the cache on a console; untried.
@@ -574,7 +588,7 @@ commits the rest, are the owner's decisions of 2026-10-17.
   map). The image builder counts 22,800 bytes of ROM room before the last 128 KiB, 22,992 before ("Rules
   for new code"). In the settings' build of 2026-10-18 `bkbt_ap_settings` is at `0x80275C6C` and the
   anchor at `0x80275C74`; both move with every build (`0x80275D8C` and `0x80275DAC` in the items' build
-  of that day).
+  of that day, `0x80275D8C` and `0x80275DC0` in the molehills' build of 2026-10-22).
 
 Checked on mupen64plus with the BKBT repository's settings check (`tools/bk_settings_check.py`, a stand-in
 client that finds the settings through the anchor and writes `skip_intro` and then the seed), on
@@ -614,25 +628,27 @@ on every main-loop iteration, a move sent is learned and a move not sent is unle
 switch: every hack build, by itself and in the dual-boot image; the matching build has none of it. Done
 on 2026-10-18 (hack feature 3, version 1); the mirrored totals, one byte per move indexed by the game's
 own ability numbers, and a client that always sends moves 3 and `0x13`, are the owner's decisions of
-that day. **Known issue until hack feature 4: with a client attached, the Spiral Mountain molehill that
-teaches the jumps softlocks** (below).
+that day. Its known issue, the Spiral Mountain molehill that teaches the jumps softlocking with a client
+attached, is resolved since 2026-10-22 by hack feature 4's molehills (below; "Molehills as Archipelago
+locations").
 
-- **The layout** (`include/bkbt.h:103-114`), behind the anchor's `+0x10` (`:146`):
+- **The layout** (`include/bkbt.h:103-114`), behind the anchor's `+0x10` (`:159`):
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u8 moves[20]` | indexed by `enum ability_e` (`include/core2/abilityprogress.h:23-44`: 0 barge to `0x13` the first note door); not 0 = received, 0 = not |
 
   `BKBT_AP_MOVE_COUNT` is 20 (`:108`); only `u8`, so no padding. With the pointer the anchor grew to 20
-  bytes and its version to 0.3.0 (`BKBT_AP_VERSION_MINOR`, `:129`): a ROM whose anchor says 0.2.0 or
-  size 16 has no items.
+  bytes and its version to 0.3.0 (`BKBT_AP_VERSION_MINOR`, `:142`, 4 since the locations): a ROM whose
+  anchor says 0.2.0 or size 16 has no items.
 - **Where.** `src/core1/code_0.c`: the global `bkbt_ap_items` (`:196-197`), initialised data in core1's
-  `.data`, all 0; `bkbt_apItemsAllowed()` (`:207-219`), the gate (below); `bkbt_apApplyItems()`
-  (`:221-233`), which returns unless the gate allows and otherwise calls `ability_setLearned(i,
+  `.data`, all 0; `bkbt_apItemsAllowed()` (`:211-223`), the gate (below); `bkbt_apApplyItems()`
+  (`:225-237`), which returns unless the gate allows and otherwise calls `ability_setLearned(i,
   moves[i] != 0)` for each i below `BKBT_AP_MOVE_COUNT` and counts the pass. It is the first statement
-  of `bkbt_frame` (`:336-337`), so it runs once per `mainLoop` iteration, ahead of the chord.
+  of `bkbt_frame` (`:341-342`), so it runs once per `mainLoop` iteration, ahead of the chord.
   `core2/abilityprogress.h` is included under `#if BKBT` at the top (`:8-11`). The anchor's initialiser
-  ends with `&bkbt_ap_items` (`:246`). Declaration: `include/bkbt.h:114`.
+  holds `&bkbt_ap_items` (`:250`). Declaration: `include/bkbt.h:114`. (Lines of the molehills' build of
+  2026-10-22.)
 - **The mirror.** `ability_setLearned` (`src/core2/abilityprogress.c:114-120`) sets or clears one bit of
   `learnedAbilities` and does nothing else: no dialog, no sound, no flag. So a received move is there
   without Bottles' lesson, and a move the client has not sent is unlearned on the next iteration,
@@ -669,34 +685,40 @@ teaches the jumps softlocks** (below).
   not shuffle included: the mirror unlearns every move it does not send.
 - **Moves 3 and `0x13`: the client always sends them.** The game mirrors all 20 bits, and these two are
   sent always, like every move the world does not shuffle (the owner's decision of 2026-10-18). Camera
-  control (3) is taught by Bottles' first molehill (`src/SM/ch/smbottles.c:65`, `:325-328`) and read by
-  nothing (`can_control_camera`, `src/core2/playerutils.c:31-32`, has no caller). The first note door
-  (`0x13`) is checked by every note door (`src/lair/lairspawnqueue.c:971`) and taught by a molehill
-  (`src/core2/ch/mole.c:66`, `:257-258`): not sent, no note door opens. Shuffling either later needs
+  control (3) is Bottles' first molehill's move (`src/SM/ch/smbottles.c:69`) and read by nothing
+  (`can_control_camera`, `src/core2/playerutils.c:31-32`, has no caller). The first note door (`0x13`) is
+  checked by every note door (`src/lair/lairspawnqueue.c:971`) and is a molehill's move
+  (`src/core2/ch/mole.c:70`): not sent, no note door opens. Since 2026-10-22 neither molehill teaches
+  its move ("Molehills as Archipelago locations"), so the client is the only way to either. Shuffling
+  either later needs
   logic work; BK_Randomizer shuffles neither (its molehill shuffle covers nine moves,
   `docs/upstream-bk-randomizer.md:75-77` of the BKBT repository).
-- **Without a client** (R held with A) the seed stays 0, nothing is applied, the save's moves stay and
-  the molehills teach as in retail. A client that commits later, during play, makes the moves the
+- **Without a client** (R held with A) the seed stays 0, nothing is applied and the save's moves stay.
+  In this build the molehills taught as in retail; since 2026-10-22 they teach nothing, with a client or
+  without one, and check their locations instead, so without a client no move is learned in play
+  ("Molehills as Archipelago locations"). A client that commits later, during play, makes the moves the
   mirror from then on (the items check's `--client control`), and the next save keeps that.
-- **Known issue: the molehills under a client** (until hack feature 4). A molehill whose move the client
-  has not sent teaches it (`player_unlockAbility`), and on the next iteration the mirror unlearns it, so
-  every talk plays the lesson for a new move, not the refresher, with what that lesson hands out
-  (`src/core2/ch/mole.c:238-264`, `src/SM/ch/smbottles.c:304-328`; read). Found by the owner's hand
-  test of 2026-10-18: the Spiral Mountain molehill that teaches the jumps, where Bottles asks for a tall
-  jump, softlocks. The lesson teaches the high jump, the next iteration the mirror unlearns it (the
-  stand-in client sent only 3, 4 and `0x13`), and because the high jump is checked on every frame
-  (`bs/jump.c:102`) only the short jump happens, so the lesson cannot be completed. Camera control's
-  lesson was tried too and is harmless; the other molehills were not tried. Hack feature 4 is the fix:
-  the molehills become locations, and a stand-in dialog takes the place of the lesson.
+- **Resolved on 2026-10-22: the molehills under a client** (the known issue of this build, until hack
+  feature 4). A molehill whose move the client had not sent taught it (`player_unlockAbility`), and on
+  the next iteration the mirror unlearned it, so every talk played the lesson for a new move, not the
+  refresher, with what that lesson hands out (`src/core2/ch/mole.c:238-264`,
+  `src/SM/ch/smbottles.c:304-328` in this build; read). Found by the owner's hand test of 2026-10-18: the
+  Spiral Mountain molehill that teaches the jumps, where Bottles asks for a tall jump, softlocked. The
+  lesson taught the high jump, the next iteration the mirror unlearned it (the stand-in client sent only
+  3, 4 and `0x13`), and because the high jump is checked on every frame (`bs/jump.c:102`) only the short
+  jump happened, so the lesson could not be completed. Camera control's lesson was tried too and was
+  harmless; the other molehills were not tried. The fix is hack feature 4's first part: the molehills
+  check locations instead of teaching, and the jump tutorial is no longer spawned ("Molehills as
+  Archipelago locations").
 - **Not done: binding the seed to the save** ("The Archipelago settings"). With the items it is a risk:
   a save of another seed, or one played without a client, loaded while this slot's client runs, gets
-  this slot's moves mirrored into it, and its next save keeps them.
+  this slot's moves mirrored into it, and its next save keeps them. It is the next feature (2026-10-22).
 - **A map-flag hazard** (read, not run). The first high jump, flap and flip (`ability_setUsedWithDialog`,
   `src/core2/abilityprogress.c:25-38`) set Spiral Mountain's map flags 8, 9 and `0xA` without looking at
   the map. In retail those moves are taught in Spiral Mountain and first used there; one received
   elsewhere can be first used elsewhere, and then sets id 8, 9 or `0xA` in that map's flags. What those
   ids mean in the other maps was not looked at.
-- **For the tools: the pass counter.** `sBkbtApItemPasses` (`:199-205`) counts the iterations on which
+- **For the tools: the pass counter.** `sBkbtApItemPasses` (`:203-209`) counts the iterations on which
   the items were applied, exported as `bkbt_ptr_ap_item_passes` ("Exports for tools"): a test that
   expects the items not to be applied somewhere proves nothing unless the game is shown to apply them
   elsewhere. The items check judges by it that no pass falls on the logos, the concert, the file select,
@@ -704,7 +726,8 @@ teaches the jumps softlocks** (below).
 - **What it costs.** 320 bytes of RAM headroom: lair ends at `0x80395AA0` instead of `0x80395960` (the
   map). The image builder counts 22,592 bytes of ROM room before the last 128 KiB, 22,800 before ("Rules
   for new code"). In the items' build of 2026-10-18 `bkbt_ap_items` is at `0x80275D94`,
-  `bkbt_ptr_ap_item_passes` at `0x80275DA8` and the anchor at `0x80275DAC`; all move with every build.
+  `bkbt_ptr_ap_item_passes` at `0x80275DA8` and the anchor at `0x80275DAC`; all move with every build
+  (`0x80275D94`, `0x80275DBC` and `0x80275DC0` in the molehills' build of 2026-10-22).
 
 Checked on mupen64plus with the BKBT repository's items check (`tools/bk_items_check.py`, a stand-in
 client that finds the settings and the items through the anchor and writes `skip_intro`, the moves and
@@ -740,6 +763,139 @@ softlocked, as described above. Not checked: Furnace Fun (read, not run), Bottle
 the map-flag hazard, a console (the game reads what the client writes through KSEG0), and a real
 client: none exists for this game yet.
 
+## Molehills as Archipelago locations
+
+With `BKBT=1` Bottles' molehills are Archipelago locations: a molehill no longer teaches its move, it
+checks its location, and the move comes only as an item from the client ("The Archipelago items"). The
+game records the checks in `bkbt_ap_locations`, a 20-byte struct that the anchor points to from layout
+0.4.0 on, one byte per move, which the game writes and the client only reads. A molehill picks its
+first-visit text or its refresher by that byte, not by whether the move is known. This is the first part
+of hack feature 4 (`docs/ROADMAP.md` of the BKBT repository); the vanilla flags of jiggies, honeycombs
+and tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate:
+every hack build, by itself and in the dual-boot image, with a client or with R + A without one; the
+matching build has none of it. Done on 2026-10-22; one byte per move indexed like the items, the game as
+the only writer, and no gate are the owner's decisions of that day. It resolves the known issue of the
+items: the Spiral Mountain molehill that teaches the jumps no longer softlocks under a client.
+
+- **The layout** (`include/bkbt.h:116-127`), behind the anchor's `+0x14` (`:160`):
+
+  | Offset | Field | Value |
+  |---|---|---|
+  | `+0x00` | `u8 moves[20]` | indexed by `enum ability_e`, the move a molehill teaches; not 0 = that molehill's location is checked, 0 = not |
+
+  `BKBT_AP_MOVE_COUNT` (`:108`), as for the items; only `u8`, so no padding. With the pointer the anchor
+  grew to 24 bytes and its version to 0.4.0 (`BKBT_AP_VERSION_MINOR`, `:142`): a ROM whose anchor says
+  0.3.0 or size 20 has no locations. The two Spiral Mountain molehills that teach three moves set three
+  bytes each (below).
+- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_locations` (`:199-201`), initialised data in
+  core1's `.data`, all 0; the anchor's initialiser ends with `&bkbt_ap_locations` (`:251`).
+  Declaration: `include/bkbt.h:127`. Its writers and readers are the two molehill actors,
+  `src/core2/ch/mole.c` and `src/SM/ch/smbottles.c`, each with `bkbt.h` included under `#if BKBT` at the
+  top (`mole.c:5-7`, `smbottles.c:7-9`).
+- **The molehills of the levels and the Lair** (`mole.c`, ids 9..`0x12`, the table `moleTable`,
+  `:60-71`: `0xA` eggs, `0xB` beak buster and `0xC` talon trot in Mumbo's Mountain, `0xD` shock jump and
+  `0xE` flight in Treasure Trove Cove, `0xF` Wonderwing in Clanker's Cavern, `0x10` wading boots in
+  Bubblegloop Swamp, 9 beak bomb in Freezeezy Peak, `0x11` turbo trainers in Gobi's Valley, the levels
+  as `chmole_learnedAllLevelAbilities` has them, `:76-97`; `0x12` the first note door, in the Lair).
+  `chmole_learnAbility` (`:246-253`) and `chmole_startingDialog` (`:336-343`) test the molehill's byte
+  where retail tests its move: not 0, the refresher; 0, the lesson text, and the first talk sets the byte
+  where retail calls `player_unlockAbility` (`:262-269`). The rest of the first talk is retail's
+  (`:270-281`: a sound or the note display, the dialog and its learn actions, below). The note-door mole
+  starts talking by itself, without B, while its byte is 0 (`:422-432`; retail: while its move is not
+  known). Keyed on the move, as first written, its lesson (`0xF64`) and refresher (`0xF65`) re-opened
+  every ~310 frames without a client and Banjo could not leave: the locations check found the loop, and
+  the owner keyed the trigger on the byte.
+- **Spiral Mountain** (`smbottles.c`, ids 2..7, the table `chSmBottlesDialogTable`, `:67-76`: 2 camera
+  control, 3 dive, 4 the attacks, 5 beak barge, 6 the jumps, 7 climb). `__chSmBottles_getRefresherDialog`
+  tests the byte (`:311-319`) and sets it where retail teaches (`:340-348`), both skipped for ability -1,
+  which the intro (1) and bridge (8) Bottles have in the table: the index would fall outside the array.
+  Bottles pops out of a molehill whose byte is 0 and stays in the hill at one already checked (`sp34`,
+  `:580-587`; retail: whether the move is known). Keyed on the move, as first written, Bottles stayed in
+  the hill where the client had sent the move (read), and camera control's lesson came 3 frames after B;
+  since, 50 frames after B, with Bottles popping out. The attack molehill (4) sets the bytes of claw swipe, roll
+  and rat-a-tat rap (4, `0xC`, `0xB`) and the jump molehill (6) those of flap flip, the high jump and
+  feathery flap (8, `0xA`, 7), and both then play their refresher (`:410-419`, `:429-437`), on the first
+  visit as on every later one: nothing tells a fresh check there.
+- **The tutorials are gone.** Spiral Mountain's map flags 1 (talked to Bottles), 3 (all moves learned),
+  2, `0xC` and `0xF` are set whenever Bottles' actor initialises (`smbottles.c:519-540`; retail sets them
+  once the first or all nine moves are known), so Bottles' introduction and his offer to skip the
+  tutorial do not run. Should the offer run, its answer shows `ASSET_E07` and never skips (`:686-699`,
+  commented as unreachable; `FILEPROG_DB_SKIPPED_TUTORIAL` is still set from the answer, `:685`, outside
+  the `#if`). The jump tutorial is not in Spiral Mountain's spawn list any more
+  (`src/SM/smspawnqueue.c:140-147`): that is what removes the softlock. The attack tutorial goes from its
+  first state straight to its completed one, which spawns the Colliwobble at once
+  (`src/SM/ch/attacktutorial.c:159-165`): its honeycomb can be collected without the lesson, and killing
+  it takes an attack move, which the world's logic has to require.
+- **The bridge is always open.** The broken bridge (`func_80363500`, `src/core2/code_DC4B0.c:34-44`)
+  takes retail's path for a player who knows all nine Spiral Mountain moves (`func_80363440`, then
+  despawn) on its first frame, whatever is learned: the world's logic must not assume the nine-move gate.
+  Not changed: a loaded game goes to the Lair only with all nine Spiral Mountain moves learned and
+  progress flag `0xBD` (`chmole_learnedAllSpiralMountainAbilities`, `mole.c:520-532`, in
+  `src/core2/ch/gameSelect.c:526-530`), otherwise to Spiral Mountain at the exit from Banjo's house.
+- **No client gate.** R + A without a client plays the same way: the molehills check their locations and
+  teach nothing, and no move arrives, because the items apply only with a committed seed. It is a test
+  path with Archipelago behaviour, there to show that nothing breaks or freezes before a client is set
+  up (the owner's decision of 2026-10-22). "Without a client, play as retail" no longer holds for the
+  molehills.
+- **The protocol, for the client** (none exists yet). One writer: the game writes the locations, the
+  client only reads them. The client sends a check for every byte that is not 0 and that it has not sent
+  yet; the server ignores a check it already has. Nothing commits them: a byte goes from 0 to not 0 once,
+  and the game does not clear one during a boot (the locations check judges that).
+- **RAM only, for now.** The locations are initialised data and are not saved, so a reset and each
+  launch from Tooie start them at 0: a molehill then shows its first-visit text again and sets its byte
+  again, which reaches the server as a repeat.
+- **Lesson rewards repeat.** What a lesson hands out comes with every first-visit text
+  (`chmole_additionalAbilityLearnActions`, `mole.c:204-240`): the egg molehill gives 50 eggs (`:224-226`)
+  with eggs not learned (0 to 50, measured), and again after a reset and reload; the flight and
+  Wonderwing lessons give 25 red and 5 gold feathers the same way (`:227-232`; read, not run).
+- **A save that skipped Bottles' tutorial.** A retail save made after the skip has
+  `FILEPROG_DB_SKIPPED_TUTORIAL` set, and there a checked Spiral Mountain molehill shows Bottles'
+  refuse-help texts (`ASSET_E0A`..`E0E`) instead of its refresher (`smbottles.c:320-328`; read, not run).
+- **Not done: the seed bound to the save, and the locations in it.** The owner decided on 2026-10-22
+  that this is the next feature: the hack saves in SRAM always, the ROM by itself too, and the save knows
+  its seed, bound per file and checked when a file is chosen (a seed stays committed across Save and
+  Quit). Then the game keeps the locations in the save, still their only writer, which buffers checks
+  made offline, and the server only reads them. A save that lacks checks the server has (a lost save)
+  will then show first-visit texts again, and the server ignores the repeats: cosmetic. Until then the
+  risk of "The Archipelago items" is larger: a save of another seed loaded while this slot's client runs
+  gets this slot's moves, and the checks its molehills make are sent to this slot.
+- **For the tools.** `bkbt_ap_locations` is a global, so the map carries it (`0x80275DA8` in the
+  molehills' build of 2026-10-22; the anchor moved to `0x80275DC0` and `bkbt_ptr_ap_item_passes` to
+  `0x80275DBC`, `bkbt_ap_items` stayed at `0x80275D94`); all move with every build. The anchor check
+  compares the anchor's `+0x14` with it; the locations check reads the bytes through the anchor.
+- **What it costs.** 96 bytes of RAM headroom: lair ends at `0x80395B00` instead of `0x80395AA0` (the
+  map). ROM room by the image builder's count (taken from the built images): 22,624 bytes before the last
+  128 KiB, 32 more than the items' 22,592; the code is stored compressed ("Rules for new code").
+
+Checked on mupen64plus with the BKBT repository's locations check (`tools/bk_locations_check.py`: it
+loads a planted game, puts Banjo next to one molehill by writing the player's position, presses B,
+answers the dialogs with A and watches the dialog, the learned moves and the locations, with the stand-in
+client of the items check or with R + A), on 2026-10-22, recompiler unless said, all passing on this
+build: the note-door mole in the Lair (`0x12`) without a client (`nomoves`) and with one (`located`);
+Spiral Mountain 6 `located` and `nomoves`, 2 `sent` (camera control's lesson `0xDF4` 50 frames after B,
+Bottles popping out), 3, 4, 5 and 7 `located`, 4 and 6 `sent`, 6 after a reload `forgotten`; Mumbo's
+Mountain `0xA` `located` and `sent` (moves 3, 4, 6 and `0x13`), `0xB` and `0xC` `located`, `0xA` without a
+client after a reload `forgotten`; on the autotest image Spiral Mountain 6 `located` and Mumbo's
+Mountain `0xA` `nomoves`; Spiral Mountain 6 on the pure interpreter. A deliberately wrong expectation
+(`0xA` `sent` with eggs not sent) failed, on two lines. On the build before the owner's two fixes
+(`f2041451...`) the same tool passed 19 runs and failed the note-door mole without a client, with the
+loop described above (Banjo moved 0 units). Measured: the egg molehill's lesson gives 50 eggs with eggs
+not learned, and again after a reset and reload. The anchor check of layout 0.4.0 (10 lines on the ROM by
+itself, the `+0x14` pointer among them; also on the soak3 image), the round trips, the anti-tamper, save,
+logo, new-game, settings and items checks pass on the same build, and its matching build is the retail
+ROM (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). By hand, the owner reported on 2026-10-22
+that on Project64 3.0.1 and ares v148, in the normal image of this build, with the stand-in client
+`tools/bk_hand_client.py --moves 3,4,0x13` of the BKBT repository, which now reads the locations and sends
+the move of every one checked: at an unchecked molehill Bottles popped out with the lesson text, the
+client printed the check and the move arrived; the same molehill again gave the refresher with Bottles in
+the hill; the jump and attack molehills gave their refresher and then their three moves arrived; after a
+reset and reload the molehills showed the lesson again; and without a client (R + A) no move arrived,
+nothing froze, the molehills showed the lesson text and then the refresher, and the note-door mole let
+Banjo go. Before the two fixes the owner had played through Mumbo's Mountain by hand with the feature.
+Not checked: the molehills of the later levels (9 and `0xD`..`0x11`: Treasure Trove Cove, Clanker's
+Cavern, Bubblegloop Swamp, Freezeezy Peak, Gobi's Valley), a console, and a real client: none exists for
+this game yet.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -755,9 +911,10 @@ client: none exists for this game yet.
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
-  settings of 2026-10-18 and 65,888 with the Archipelago items of that day: the largest, lair, ends at
-  `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
-  `0x80395960` in that of the settings and at `0x80395AA0` in that of the items, read as
+  settings of 2026-10-18, 65,888 with the Archipelago items of that day and 65,792 with the molehills as
+  locations of 2026-10-22: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
+  2026-10-15, at `0x80395890` in that of 2026-10-17, at `0x80395960` in that of the settings, at
+  `0x80395AA0` in that of the items and at `0x80395B00` in that of the molehills, read as
   `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
@@ -782,9 +939,16 @@ client: none exists for this game yet.
   what the save check reads: `gSaveData`, `gameFile_saveData`, `gameFile_GameIdToFileIdMap`,
   `D_80383F04` (the spare file) and the function `savedata_8033CC98` are globals too, and so is the
   Archipelago anchor, `bkbt_ap_anchor` ("The Archipelago anchor"), its settings, `bkbt_ap_settings`
-  ("The Archipelago settings"; the anchor check compares the anchor's `+0x0C` with it), and its items,
-  `bkbt_ap_items` ("The Archipelago items"; the anchor check compares the anchor's `+0x10` with it), and
-  the game's own `learnedAbilities`, which the items check reads. Two of those names
+  ("The Archipelago settings"; the anchor check compares the anchor's `+0x0C` with it), its items,
+  `bkbt_ap_items` ("The Archipelago items"; the anchor check compares the anchor's `+0x10` with it), and,
+  since 2026-10-22, its locations, `bkbt_ap_locations` ("Molehills as Archipelago locations"; the anchor
+  check compares the anchor's `+0x14` with it), and the game's own `learnedAbilities`, which the items
+  and locations checks read, and `g_Dialog`, which the locations check reads. One static is used without
+  an export: the locations check
+  writes the player's position, `sPlayerPosition` in `src/core2/playerposition.c`, which has no symbol;
+  it takes that file's `.bss` from the map and checks at run time that it holds the position (plausible
+  floats, and Banjo moved by the game after the tool's write), and stops as a harness problem otherwise.
+  Two of those names
   are ones the decomp generated; if upstream renames them, `tools/bk_fork_info.py` of the BKBT
   repository has to follow. The BKBT repository's new-game check reads more globals, by name from the
   map; several of those names were generated by the decomp too (its docstring lists them), and it stops
@@ -811,4 +975,5 @@ client: none exists for this game yet.
     overlay ends at cart `0xFDA6B0`, 22,864 bytes below that line (23,504 in the build of 2026-10-12,
     before the save device; 22,992 by the image builder's count in the build of 2026-10-17, with the
     Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings; 22,592 in that with
-    the Archipelago items, later that day).
+    the Archipelago items, later that day; 22,624 in that of 2026-10-22, with the molehills as
+    locations).

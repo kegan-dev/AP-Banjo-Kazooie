@@ -113,6 +113,19 @@ typedef struct {
 
 extern BkbtApItems bkbt_ap_items;
 
+/* The locations the player has checked (hack feature 4; version 1: the molehills, one per move they
+ * teach). The game writes them and the client only reads them: one writer. A molehill sets its move's
+ * byte when the player first talks to it, and the client sends a check for every byte it has not sent
+ * yet; the server ignores a check it already has. The molehills also read them, for the first-visit
+ * text or the refresher. For now they live in RAM only: every boot starts them at 0, so after a reset or
+ * a launch from Tooie a molehill shows its first-visit text again and sets its byte again. Keeping them
+ * in the save, with the seed, is the next feature. */
+typedef struct {
+    u8 moves[BKBT_AP_MOVE_COUNT];   /* +0x00: indexed by enum ability_e, the move a molehill teaches; not 0 = checked */
+} BkbtApLocations;                  /* 20 bytes; only u8, so no padding */
+
+extern BkbtApLocations bkbt_ap_locations;
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -126,7 +139,7 @@ extern BkbtApItems bkbt_ap_items;
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 3
+#define BKBT_AP_VERSION_MINOR 4
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -144,7 +157,8 @@ typedef struct {
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
     BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0) */
-} BkbtApAnchor;                 /* 20 bytes */
+    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0) */
+} BkbtApAnchor;                 /* 24 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
 

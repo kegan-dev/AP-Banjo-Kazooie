@@ -137,7 +137,14 @@ void SM_resetSpawnableActors()
     spawnableActorList_add(&gChVegetablesBawlB,  actor_new, ACTOR_FLAG_UNKNOWN_0 | ACTOR_FLAG_UNKNOWN_5 | ACTOR_FLAG_UNKNOWN_8 | ACTOR_FLAG_UNKNOWN_25);
     spawnableActorList_add(&gChVegetablesCollywobbleB,  actor_new, ACTOR_FLAG_UNKNOWN_0 | ACTOR_FLAG_UNKNOWN_5 | ACTOR_FLAG_UNKNOWN_8 | ACTOR_FLAG_UNKNOWN_21 | ACTOR_FLAG_UNKNOWN_25);
     spawnableActorList_add(&gChBottles,  actor_new, ACTOR_FLAG_UNKNOWN_8);
+#if BKBT
+    /* The jump tutorial cannot be completed if the player does not know the
+     * jump abilities when it is visited. Bottles will just give refresher text
+     * for this location. Limitation is the player doesn't know if this is a
+     * fresh check or not */
+#else
     spawnableActorList_add(&gChJumpTutorial,  actor_new, ACTOR_FLAG_NONE);
+#endif
     spawnableActorList_add(&gSmBridgeChecksumTrigger ,  actor_new, ACTOR_FLAG_NONE);
     spawnableActorList_add(&gBanjosBed,  actor_new, ACTOR_FLAG_UNKNOWN_3 | ACTOR_FLAG_UNKNOWN_6 | ACTOR_FLAG_UNKNOWN_7 | ACTOR_FLAG_UNKNOWN_9 | ACTOR_FLAG_UNKNOWN_10);
     spawnableActorList_add(&gBanjosChair,  actor_new, ACTOR_FLAG_UNKNOWN_3 | ACTOR_FLAG_UNKNOWN_6 | ACTOR_FLAG_UNKNOWN_7 | ACTOR_FLAG_UNKNOWN_9 | ACTOR_FLAG_UNKNOWN_10);
