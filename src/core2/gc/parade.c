@@ -153,6 +153,9 @@ void gcparade_8031ABA0(void) {
     if (D_803830F0.unk8 != -1) {
         gameSelect_setGameNumber(D_803830F0.unk8);
         gameFile_load(D_803830F0.unk8);
+#if BKBT
+        bkbt_gameFile_loadAP(D_803830F0.unk8);
+#endif
         func_80347AA8();
     }
 }

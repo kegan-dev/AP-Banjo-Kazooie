@@ -3,6 +3,9 @@
 #include "variables.h"
 
 #include "save.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 /* .bss */
 SaveData gameFile_saveData[4]; //save_data
@@ -81,7 +84,13 @@ s32 gameFile_8033CFD4(s32 gamenum){
     filenum = D_80383F04;
     next = gameFile_GameIdToFileIdMap[gamenum];
     gameFile_GameIdToFileIdMap[gamenum] = D_80383F04;
+#if BKBT
+    /* Key the copy off of the size of SaveData to prevent issues in hard-coded
+     * save sizes as features are added to the hack */
+    bcopy(&gameFile_saveData[next], &gameFile_saveData[filenum], sizeof(SaveData));
+#else
     bcopy(&gameFile_saveData[next], &gameFile_saveData[filenum], 0xF*8);
+#endif
     save_data = gameFile_saveData + filenum;
     save_data->slotIndex = gamenum + 1;
     savedata_update_crc(save_data, sizeof(SaveData));
@@ -116,6 +125,15 @@ void gameFile_load(s32 gamenum){
     s32 filenum = gameFile_GameIdToFileIdMap[gamenum];
     saveData_load(&gameFile_saveData[filenum]);
 }
+#if BKBT
+/* Load AP specific items from the save file into memory. Should only be called
+ * after the file is selected by the user. Otherwise the client will commit
+ * location checks for files being hovered. See gameselect.c */
+void bkbt_gameFile_loadAP(s32 gamenum) {
+    s32 filenum = gameFile_GameIdToFileIdMap[gamenum];
+    bkbt_saveData_loadAP(&gameFile_saveData[filenum]);
+}
+#endif
 
 void gameFile_save(s32 gamenum){
     s32 filenum = gameFile_GameIdToFileIdMap[gamenum];

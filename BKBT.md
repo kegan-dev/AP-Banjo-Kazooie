@@ -50,11 +50,13 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 5. **A build that cannot pass off a stale or damaged result**: objects depend on the switches and on the
    headers, the link depends on the symbol files it reads, and the final ROM gets its name only when
    `bk_rom_compress` succeeded and the file is 16 MiB.
-6. **The save device** (2026-10-14): inside the dual-boot image the game keeps its 512 bytes of save in
-   the image's SRAM, from `0x7000` on, instead of the EEPROM the image does not have; run by itself it
-   keeps its EEPROM ("The save device" below). `src/core1/eeprom.c`, the accessor `bkbt_launched()` in
-   `src/core1/code_0.c`, and the linker symbol `bkbt_sram_offset` with its assertions in
-   `manual_syms.us.v10.txt`.
+6. **The save device** (2026-10-14; SRAM always since 2026-10-26, item 13): the game keeps its save in
+   32 KiB of SRAM from `0x7000` on, by itself and in the dual-boot image, never in an EEPROM; the exported
+   ROM's header declares SRAM 256k ("The save device" below). `src/core1/eeprom.c`,
+   `include/core1/eeprom.h`, the record lengths in `src/core2/code_B5040.c` and `src/core2/code_B5E00.c`,
+   and the linker symbol `bkbt_sram_offset` with its assertions in `manual_syms.us.v10.txt`. From
+   2026-10-14 to 2026-10-26 only inside the image, chosen by `bkbt_launched()` in `src/core1/code_0.c`,
+   with retail's 512 bytes; by itself the ROM kept its EEPROM.
 7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
@@ -71,9 +73,9 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     repository, hack feature 2): `bkbt_ap_settings`, 8 bytes that the client writes and the game only
     reads, found through the anchor's new `+0x0C` (layout 0.2.0). The seed is written last and commits
     them (and, since item 11, the items). Until a client has, A on a file of the file select gets the
-    buzzer, unless R is held with it, which starts the game with the defaults. The first setting is the
-    intro skip of item 7. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ch/gameSelect.c` ("The
-    Archipelago settings" below).
+    buzzer; until 2026-10-26 R held with it started the game with the defaults (item 13 removed that).
+    The first setting is the intro skip of item 7. `include/bkbt.h`, `src/core1/code_0.c`,
+    `src/core2/ch/gameSelect.c` ("The Archipelago settings" below).
 11. **The Archipelago items, version 1: moves** (2026-10-18; `docs/ROADMAP.md` of the BKBT repository,
     hack feature 3): `bkbt_ap_items`, 20 bytes, one per move, that the client writes and the game only
     reads, found through the anchor's new `+0x10` (layout 0.3.0). While the seed is committed and a file
@@ -86,9 +88,21 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     client only reads, found through the anchor's new `+0x14` (layout 0.4.0). A molehill's first talk
     sets its move's byte instead of teaching the move, which comes only as an item, and the byte, not
     the move, picks the lesson text or the refresher. Spiral Mountain's tutorials are gone and its
-    bridge is always open. No client gate: R + A plays the same way. RAM only for now. `include/bkbt.h`,
-    `src/core1/code_0.c`, `src/core2/ch/mole.c`, `src/SM/ch/smbottles.c`, `src/SM/ch/attacktutorial.c`,
-    `src/SM/smspawnqueue.c`, `src/core2/code_DC4B0.c` ("Molehills as Archipelago locations" below).
+    bridge is always open. No client gate of its own. In RAM only until item 13 saved them.
+    `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ch/mole.c`, `src/SM/ch/smbottles.c`,
+    `src/SM/ch/attacktutorial.c`, `src/SM/smspawnqueue.c`, `src/core2/code_DC4B0.c` ("Molehills as
+    Archipelago locations" below).
+13. **The save bound to its seed, with the molehill locations saved** (2026-10-26; `docs/ROADMAP.md` of
+    the BKBT repository, the feature after hack feature 4's molehills): every game record carries the seed
+    it is played with and the 20 location bytes (`SaveData` `0x90` bytes, retail `0x78`), in SRAM always,
+    the ROM by itself too (item 6). A on the file select starts or loads a game only while a client has
+    committed its settings, and loads a file only when it is empty or was saved with the committed seed;
+    the R escape of item 10 is gone. The A that starts a game latches its seed for saving and loads its
+    locations. `include/save.h`, `include/bkbt.h`, `include/core1/eeprom.h`, `src/core1/code_0.c`,
+    `src/core1/eeprom.c`, `src/core2/ch/gameSelect.c`, `src/core2/code_956B0.c`,
+    `src/core2/code_B5040.c`, `src/core2/code_B5E00.c`, `src/core2/ch/bottlesbonuscursor.c`,
+    `src/core2/gc/parade.c`, `src/core2/code_C4320.c` ("The save device", "The Archipelago settings",
+    "Molehills as Archipelago locations" below).
 
 ## The frame hook
 
@@ -143,7 +157,8 @@ caches: a cached access here passes every test and fails on a console.
   because every start consumes it. A payload that merely lies in RAM is never called, however valid its
   header looks.
 - With the right token it remembers that the launcher started the game (`sBkbtLaunched`, read through
-  `bkbt_launched()`, by which the save code picks its device: "The save device" below), latches
+  `bkbt_launched()`; the save code picked its device by it until 2026-10-26, and nothing calls it now: the
+  BKBT repository's `tools/bk_fork_info.py` takes the symbol as a mark of a hack build), latches
   the flags, and accepts the payload if `+0x24` is a word-aligned KSEG0 address whose 20-byte header lies
   inside `0x80400000..0x80800000`, with magic `'BKP2'` and this ROM's contract number. Then, and only
   then, there is a return entry.
@@ -252,22 +267,51 @@ the ROM was only booted in the emulator (`osMemSize` `0x400000`, nothing called)
 comes before any access above 4 MiB is shown by the disassembly of `bkbt_init`, not by a run.
 
 ## The save device
-
-The dual-boot image is one cartridge with one save device, 32 KiB of SRAM at cart address `0x08000000`,
-and no EEPROM. The Tooie hack keeps its save there from offset 0. With `BKBT=1`, when the launcher
-started this game, the game's 512 bytes of "EEPROM" are 512 bytes of that SRAM instead: block n is the
-8 bytes at `bkbt_sram_offset + 8 * n`. Run by itself the ROM never goes there and keeps its EEPROM. The
-full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
+With `BKBT=1` the game saves to 32 KiB of SRAM at cart address `0x08000000`, by itself and in the
+dual-boot image, never to an EEPROM. The image is one cartridge with that SRAM and no EEPROM, and the
+Tooie hack keeps its save there from offset 0; this game's part starts at `bkbt_sram_offset` (`0x7000`).
+By itself the ROM has the same layout, and its header declares the SRAM, so that an emulator or a
+flashcart gives it one. So since 2026-10-26 (item 13 above); from 2026-10-14 until then only inside the
+image, chosen by `bkbt_launched()` and with retail's 512 bytes, while the ROM by itself kept its EEPROM.
+The full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
 repository, "The save device".
 
-- **Where.** `src/core1/eeprom.c`, under `#if BKBT`. `eeprom_writeBlocks` and `eeprom_readBlocks` ask
-  `bkbt_launched()` (`src/core1/code_0.c`) on every call: TRUE, the launcher's token was there at boot,
-  sends them to `bkbt_sramBlocks`; FALSE leaves them exactly as they were. No caller changed.
+- **The layout** (`include/save.h:7-24`). The four game records (`SaveData`) one behind the other, then
+  the global record (`GlobalData`, `0x20` bytes). A game record is retail's `+0x00..+0x73` (magic,
+  `slotIndex`, the game's data, `padding[2]`), then under `#if BKBT` (`:12-16`) `u32 seed` at `+0x74` and
+  `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
+  Archipelago locations"), then the checksum at `+0x8C`: `0x90` bytes, retail `0x78`. In the SRAM: the
+  records at `0x7000`, `0x7090`, `0x7120`, `0x71B0`, the global record at `0x7240`, this game's part
+  `0x7000..0x725F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`). No magic or version of its own: a save of
+  a build with `0x78`-byte records fails the checksum at the new places and shows as empty files.
+- **Where.** `src/core1/eeprom.c`, under `#if BKBT`: retail's `eeprom_writeBlocks` and `eeprom_readBlocks`
+  are the `#else` (`:153-178`) and not in the hack build, and `bkbt_write` and `bkbt_read` (`:139-152`,
+  declared in `include/core1/eeprom.h:4-12`) take their place, with `offset` and `count` in bytes from the
+  start of record `file`, the global record as file 0 at offset `4 * sizeof(SaveData)`. Both call
+  `bkbt_sram(direction, offset, buffer, size)` (`:72-137`), bytes from `bkbt_sram_offset`. Their callers
+  in `src/core2/code_B5040.c` pass `sizeof(SaveData)` and `sizeof(GlobalData)` where retail passed 15 and
+  4 blocks (`savedata_8033CA2C` `:321-341`, `savedata_8033CA9C` `:343-358`, `savedata_8033CC98`
+  `:425-437`, `savedata_8033CE40` `:453-466`); the wipe of a file's old copy stays 8 bytes
+  (`savedata_8033CCD0`, `:439-451`). Two lengths retail wrote as numbers follow `sizeof(SaveData)` too:
+  the record check, `savedata_verify` (`:331-335`, retail `0x78`), and the spare-file copy in
+  `gameFile_8033CFD4` (`src/core2/code_B5E00.c:87-93`, retail `0xF*8`). With retail's copy length every
+  file lost its seed and locations when the file select was left, since `gameSelect_free` saves all three
+  games that way (`src/core2/ch/gameSelect.c:315-340`; found by the review of 2026-10-26).
+- **The header.** The BKBT repository's `hack/build_bk_rom.sh` runs its `tools/ed64romconfig.py -w
+  sram256k` on the exported `bk-fork.z64` only (the tree's ROM and the matching build stay as `make` left
+  them), before `tools/bk_fork_info.py`, so `bk-fork.json` carries the patched ROM's sha1. Bytes
+  `0x3B..0x3F` go from `NBKE` `00` to `NEDE` `30`: game code `ED`, save type 3, SRAM 256k (the EverDrive's
+  homebrew header, the same tool and setting as the Tooie hack's Makefile). They lie outside the range the
+  boot checksum covers (`0x1000..0x101000`). mupen64plus logs "Save type: 2" with the header and "Save
+  type: 0" without it, and its SRAM answers either way, so a missing header does not show there; the BKBT
+  repository's tools refuse a build with `0x90`-byte records whose ROM does not declare SRAM
+  (`tools/bk_eeprom.py`, `layout_of`).
 - **The offset** is the linker symbol `bkbt_sram_offset = 0x7000;` in `manual_syms.us.v10.txt`, used as
   `(u32) bkbt_sram_offset` (`include/bkbt.h`), so that the map carries it for the tools. `0x7000` is the
   border the two games share: below it the SRAM is the Tooie hack's. The link stops if the offset is
-  below `0x7000`, not a multiple of 8, or leaves fewer than 512 bytes in the 32 KiB. The Tooie side's
-  copy is `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
+  below `0x7000`, not a multiple of 8, or leaves fewer than 512 bytes in the 32 KiB (the assertion still
+  says `0x200`, not `BKBT_SRAM_BYTES`; at `0x7000` either fits). The Tooie side's copy is
+  `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
   `_Static_assert` in its `src/save.c`; nothing compares the two, so change both. The BKBT repository's
   image builder refuses a build whose `bkbt_sram_offset` is not the border.
 - **The route.** The game's own `osPiStartDma` cannot reach the SRAM: it ORs `osRomBase` into every
@@ -278,14 +322,17 @@ repository, "The save device".
   builds the same request (`epidma.c:46-58`), is not among the libultra files this ROM links, and both
   builds share that list (`decompressed.us.v10.yaml`).
 - **The buffer and the cache.** Every transfer goes through `sBkbtSramBuf`, on a 16-byte boundary inside
-  `sBkbtSramRaw` and 32 whole cache lines long, never through the caller's buffer: the game's save
-  records are `0x78` bytes apart and share cache lines with other variables. The buffer is written back
-  before every transfer and invalidated after a read.
-- **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside the 64 blocks, with nothing
-  transferred; 8 (`CONT_NO_RESPONSE_ERROR`) for a write that does not read back as written. Every write
-  is read back, into the buffer filled with `0xFF`, because the game wipes a file's old copy only when
-  the write of the new one returned 0 (`gameFile_8033CFD4`, `src/core2/code_B5E00.c:88-103`). A read
-  fills the buffer with `0xFF` first as well, what a blank EEPROM holds.
+  `sBkbtSramRaw` (`eeprom.c:36`) and `BKBT_SRAM_BYTES` (`0x260`, 38 whole cache lines) long, never
+  through the caller's buffer, which shares cache lines with other variables. The buffer is written back
+  before every transfer and invalidated after a read. Every transfer the game asks for has an SRAM offset
+  and a length that are multiples of 8 (`0x90`, `0x20` and the 8-byte wipe).
+- **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside `BKBT_SRAM_BYTES`, with
+  nothing transferred (`offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset`, `:81`; the constant
+  is cast to `s32`, so that the test stays signed: with `sizeof`'s unsigned type it wrapped, found by the
+  review of 2026-10-26); 8 (`CONT_NO_RESPONSE_ERROR`) for a write that does not read back as written.
+  Every write is read back, into the buffer filled with `0xFF`, because the game wipes a file's old copy
+  only when the write of the new one returned 0 (`gameFile_8033CFD4`, `src/core2/code_B5E00.c:97-115`). A
+  read fills the buffer with `0xFF` first as well, what a blank EEPROM holds.
 - **The bus timing.** The handle carries latency 5, pulse `0x0C`, page size `0x0D` and release 2, the
   values Ocarina of Time uses for its SRAM. libultra writes them to the PI's domain 2 registers at the
   first transfer through the handle (`EPI_SYNC`, `PRinternal/piint.h`), and they stay: after a visit to
@@ -300,20 +347,29 @@ What a change to it has to keep:
   Tooie.
 - **Never a caller's buffer as the DMA's RAM side, and the cache calls around every transfer.** No
   emulator models the cache: a mistake here passes every test and fails only on a console. The build of
-  2026-10-14 was checked in the disassembly of `eeprom.c.o`.
-- **Never outside the 64 blocks.** Below them is the Tooie hack's save.
+  2026-10-14 was checked in the disassembly of `eeprom.c.o`; the build of 2026-10-26 was not.
+- **Never outside `BKBT_SRAM_BYTES`.** Below them is the Tooie hack's save.
 - **The `EDMA` types.** The plain DMA types would go through `osRomBase` and read this game's own ROM.
-- **The choice by `bkbt_launched()` alone.** A ROM run by itself must never write an SRAM it knows
-  nothing about.
+- **Lengths from `sizeof`.** Every length of a record follows `SaveData` and `GlobalData`; a number left
+  over from retail cuts the record short. The BKBT repository's tools take the record size from the
+  build (the spacing of `gameFile_saveData`) and refuse one they do not know.
+- **The header on the export.** Without it, an emulator or flashcart that goes by the header gives the
+  ROM by itself an EEPROM, and nothing it saves is kept (read, not tried; mupen64plus does not show it).
 
-What it cost in the build of 2026-10-14 (`eeprom.c.o`: `.text` `0x4F0` bytes, `.bss` `0x2D0` bytes, from
-the map): 1,728 bytes of RAM headroom and 640 bytes of ROM room ("Rules for new code").
+What it costs in the build of 2026-10-26 (`eeprom.c.o`: `.text` `0x3E0` bytes, `.bss` `0x330` bytes, from
+the map): RAM headroom grew by 2,448 bytes, lair ending at `0x80395170` instead of `0x80395B00`, because
+libultra's EEPROM functions are no longer linked (the map has none: nothing in the hack build calls one),
+and the ROM room by the image builder's count grew by 1,104 bytes, to 23,728 ("Rules for new code"). In
+the build of 2026-10-14 the save device had cost 1,728 bytes of RAM headroom and 640 bytes of ROM room.
 
 Checked on mupen64plus with the BKBT repository's save check (`tools/dualboot_save_check.py`), on
 2026-10-14: in the image, a planted save, a second boot from the file that run left (recompiler and
 pure interpreter), no file at all, a hostile file, a played save and the range test; and the ROM by
-itself, which wrote its EEPROM and no SRAM. The owner's report from trying it by hand is in
-`hack/DUALBOOT.md` of the BKBT repository, "Status". Not checked: a console.
+itself, which wrote its EEPROM and no SRAM. On 2026-10-26, with the SRAM always and the stand-in client
+the file select now needs: the autotest image from a planted game (12 of 12 lines), the ROM by itself (11
+of 11, a 32 KiB `.sra` and no `.eep`) and the ROM by itself with a played save (`--play`, 16 of 16, the
+record carrying the client's seed). The owner's reports from trying it by hand are in `hack/DUALBOOT.md`
+of the BKBT repository, "Status". Not checked: a console, power lost during a save.
 
 ## The new-game intro
 
@@ -354,7 +410,8 @@ separate change).
   what they were ("Rules for new code"). No new global, no new file.
 - **Turning it off.** A client writes `skip_intro` 0 and then the seed; a new game then asks for map
   `0x85` as retail does (since 2026-10-18; the settings check, "The Archipelago settings" below;
-  `docs/ROADMAP.md` of the BKBT repository, hack feature 8). Without a client the default skips.
+  `docs/ROADMAP.md` of the BKBT repository, hack feature 8). Until 2026-10-26 a game started without a
+  client (R + A) took the default and skipped; since then no game starts without one.
 
 Checked on mupen64plus with the BKBT repository's new-game check (`tools/bk_newgame_check.py`), on
 2026-10-14, in the dual-boot image (recompiler and pure interpreter) and on the ROM by itself: a new game
@@ -492,7 +549,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
 - **For the tools.** `bkbt_ap_anchor` is a global, so the map carries it; it moves with every build
   (`0x80275BEC` with the struct alone, `0x80275C0C` once `bkbt_init` published it, `0x80275C2C` with
   `bkbt_return`, `0x80275C74` with the settings of 2026-10-18, `0x80275DAC` with the items of that day,
-  `0x80275DC0` with the molehills of 2026-10-22). The BKBT repository's
+  `0x80275DC0` with the molehills of 2026-10-22, `0x80275248` with the save in SRAM of 2026-10-26, whose
+  core1 code is smaller without libultra's EEPROM functions). The BKBT repository's
   `tools/bk_fork_info.py` writes it into `bk-fork.json` and refuses a ROM whose core1 data does not read
   `'BKAP'` and `game_id` 1 at that symbol.
 - **What it costs.** 80 bytes of RAM headroom: lair, the largest level overlay, ends at `0x80395890`
@@ -521,11 +579,13 @@ EmuLoader has not attached by this word); any emulator but mupen64plus for the a
 With `BKBT=1` the game plays by settings that an Archipelago client writes: `bkbt_ap_settings`, an
 8-byte struct that the anchor points to from layout 0.2.0 on. This first version holds the seed of the
 generated game and one setting, `skip_intro`. Until a client has written them the file select refuses
-A, so that no game is started or loaded by the wrong settings; R held with A starts one with the hack's
-defaults, for playing without a client. There is no switch: every hack build, by itself and in the
-dual-boot image; the matching build has none of it. Done on 2026-10-18 (`docs/ROADMAP.md` of the BKBT
-repository, hack feature 2); the refusal with an escape, and the seed written last as the word that
-commits the rest, are the owner's decisions of 2026-10-17.
+A, so that no game is started or loaded by the wrong settings, and since 2026-10-26 it also refuses a
+file saved with another seed (below); there is no escape any more (until then R held with A started a
+game with the hack's defaults). There is no switch: every hack build, by itself and in the dual-boot
+image; the matching build has none of it. Done on 2026-10-18 (`docs/ROADMAP.md` of the BKBT repository,
+hack feature 2); the refusal with an escape, and the seed written last as the word that commits the
+rest, are the owner's decisions of 2026-10-17; the seed bound to the save, and no escape, the owner's of
+2026-10-22 and 2026-10-26.
 
 - **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:158`):
 
@@ -538,14 +598,15 @@ commits the rest, are the owner's decisions of 2026-10-17.
   With the pointer the anchor grew to 16 bytes and its version to 0.2.0 (`BKBT_AP_VERSION_MINOR`,
   `:142`, 3 since the items, 4 since the locations): a ROM whose anchor says 0.1.0 or size 12 has no
   settings.
-- **Where.** `src/core1/code_0.c`: the global `bkbt_ap_settings` (`:164-170`), initialised data in
-  core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:172-176`), `seed != 0`, the only place that
-  rule is written; `sBkbtApDefaults` (`:178-184`), `{0, TRUE, {0, 0, 0}}`, the hack's behaviour from
-  before settings existed; `bkbt_apSettings()` (`:186-194`), which returns `&bkbt_ap_settings` once
-  committed and the defaults until then. The anchor's initialiser holds `&bkbt_ap_settings` (`:249`),
-  which the linker fills in. Game code reads settings only through `bkbt_apSettings`, so that
-  no reader sees a half-written struct or takes its zeros for values. Declarations: `include/bkbt.h:94`,
-  `:100-101`.
+- **Where.** `src/core1/code_0.c` (lines of the build of 2026-10-26): the global `bkbt_ap_settings`
+  (`:164-170`), initialised data in core1's `.data`, all 0; `bkbt_apSettingsCommitted()` (`:175-179`),
+  `seed != 0`, the only place that rule is written; `sBkbtApDefaults` (`:181-187`), `{0, TRUE, {0, 0,
+  0}}`, the hack's behaviour from before settings existed; `bkbt_apSettings()` (`:189-197`), which returns
+  `&bkbt_ap_settings` once committed and the defaults until then. The anchor's initialiser holds
+  `&bkbt_ap_settings` (`:252`), which the linker fills in. Game code reads settings only through
+  `bkbt_apSettings`, so that no reader sees a half-written struct or takes its zeros for values (the file
+  select's seed test reads `bkbt_ap_settings.seed` directly, after `bkbt_apSettingsCommitted()`).
+  Declarations: `include/bkbt.h:94`, `:100-101`.
 - **Every boot starts at 0.** core1's `.data` is loaded again at every boot, a reset and each launch
   from Tooie included, so after either the settings read 0 and the client has to write them again.
 - **The protocol, for the client** (none exists yet). One writer per region: the client writes the
@@ -559,28 +620,41 @@ commits the rest, are the owner's decisions of 2026-10-17.
   the order here avoids it. The client should read the anchor word and the magic again right before it
   writes, as the Tooie client looks its pointer up again for every write (`game.py:111-130`).
 - **The refusal.** `gameSelect_update` in `src/core2/ch/gameSelect.c`, state `GAME_SELECT_IDLE`, under
-  `#if BKBT` (`:549-557`): a branch ahead of retail's A branch, taken when A is pressed
-  (`face_buttons` 1), R is not held (`side_buttons` 0) and `!bkbt_apSettingsCommitted()`, plays
-  `COMUSIC_2C_BUZZER` at 22000, retail's buzzer for Z on an empty file, and does nothing else. Retail's
-  lines are unchanged. It covers loading an existing file and starting a new game alike; Z (erase) is
-  not gated. `bkbt.h` is included under `#if BKBT` at the top (`:15-17`). No text is shown in this
-  version (the Tooie hack shows some): a player without a client hears only the buzzer.
-- **The escape: R held with A** falls through to retail's branch and starts with the defaults. R
-  because it is free on the file select (read elsewhere only by the player states), because R alone
-  does not trigger the blanking that L + R does (`src/core1/joy.c:254-278`), and because Z opens the
-  erase prompt. The Tooie hack's escape is L + R held (`hack/bt/n64/src/main.c:716-733` of the BKBT
-  repository), which here would blank A.
+  `#if BKBT` (`:549-556`): a branch ahead of retail's A branch, taken when A is pressed (`face_buttons`
+  1) and either `!bkbt_apSettingsCommitted()` or the game is not empty and `bkbt_file_seed` is not
+  `bkbt_ap_settings.seed` (the next item), plays `COMUSIC_2C_BUZZER` at 22000, retail's buzzer for Z on
+  an empty file, and does nothing else. Retail's lines are unchanged. It covers loading an existing file
+  and starting a new game alike; Z (erase) is not gated. `bkbt.h` is included under `#if BKBT` at the top
+  (`:15-17`). No text is shown in this version (the Tooie hack shows some): a player hears only the
+  buzzer.
+- **The seed bound to the save** (2026-10-26). Every game record carries the seed it was played with
+  (`SaveData.seed`, `include/save.h:12-16`; "The save device"). Two globals in
+  `src/core1/code_0.c:172-173` (`include/bkbt.h:165-174`), both 0 at boot: `bkbt_file_seed`, the seed of
+  the game the file select shows, set by `saveData_load` from the record
+  (`src/core2/code_B5040.c:382-385`) whenever the file select loads a hovered game that is not empty
+  (`setGameInformationZoombox`, `gameSelect.c:228-238`) and zeroed by `clearScoreStates`
+  (`src/core2/code_956B0.c:1496-1503`), for the refusal only; and `bkbt_playing_seed`, set to the
+  committed seed by the A that starts or loads a game (`gameSelect.c:558-564`, after the refusal has
+  matched the file's seed, or for a new game) and written into every record `saveData_create` makes
+  (`code_B5040.c:415-421`). Nothing else writes the playing seed, so a client that changes its seed
+  during play, the reloads of Bottles' Bonus, the parade and the ending, and `clearScoreStates` cannot
+  change the seed a save is bound to; until the review of 2026-10-26 found it, the save took whatever
+  seed was committed when it was made. A file of another seed, or a game record with seed 0 (this build
+  makes none; the BKBT repository's seed check plants one), is refused while a client is attached. A seed
+  stays committed across Save and Quit: only a boot resets the settings.
+- **No escape** (since 2026-10-26, the owner's decision). Until then R held with A fell through to
+  retail's branch and started the game with the defaults, for playing without a client, and under a
+  client it also passed the seed test (found by the review of 2026-10-26). R had been chosen because it
+  is free on the file select, because R alone does not trigger the blanking that L + R does
+  (`src/core1/joy.c:254-278`), and because Z opens the erase prompt. Hand tests now need a client: the
+  BKBT repository's stand-in `tools/bk_hand_client.py`.
 - **The first setting.** In the new-game branch (`:497-515`), `if (bkbt_apSettings()->skip_intro)`
   chooses between `MAP_1_SM_SPIRAL_MOUNTAIN` at `WARP_SM_12_FROM_HOUSE` and retail's
   `MAP_85_CS_SPIRAL_MOUNTAIN_3` ("The new-game intro").
-- **After an R start.** A client that commits later switches `bkbt_apSettings` to its values for every
-  later read. That changes nothing for `skip_intro`, which is read once, at the start; a setting read
-  during play will have to say what it means.
-- **Not done: binding the seed to the save.** The Tooie hack keeps the seed in each save file and refuses
-  a file of another seed (`save_data.custom[n].seed`, `hack/bt/n64/src/main.c:716-733`). BK's
-  standalone EEPROM has no room for it; in the image `0x7200..` of the SRAM could hold it. Deferred;
-  since the items it is a risk ("The Archipelago items"), since the locations a larger one, and it is
-  the next feature (the owner's decision of 2026-10-22, "Molehills as Archipelago locations").
+- **A client that commits again during play** switches `bkbt_apSettings` to its new values for every
+  later read. That changes nothing for `skip_intro`, which is read once, at the start, nor for the seed
+  a save is bound to; a setting read during play will have to say what it means. (Until 2026-10-26 this
+  was the case of a client that came after an R start.)
 - **Not `volatile`.** The game reads the settings through a function call at the moment it acts on
   them, and relies on IDO keeping no copy across such a call (read, not tested). A client that wrote by
   DMA would also meet the cache on a console; untried.
@@ -615,6 +689,22 @@ new game with the intro skipped, R + A on an existing file loaded it, A alone st
 switch to Tooie and back, and the chord both ways and the logo skip still worked. Values from a client
 were not tried by hand: there is none, and it would take a memory editor. Not checked: a console; a
 real client or EmuLoader; the buzzer, which no tool listens for.
+
+The seed bound to the save and the escape gone, 2026-10-26: checked on mupen64plus (recompiler) with the
+BKBT repository's seed check (`tools/bk_seed_check.py`: it plants records with chosen seeds and location
+bytes, plays the stand-in client, moves the cursor, presses A and judges `bkbt_file_seed`, the location
+bytes and the record saved), all passing, on the fork's ROM by itself unless said: a file of the client's
+seed loaded; a file of another seed, a record with seed 0, and any A without a client refused; a new
+game, saved, reset and loaded again, bound to the client's seed; a loaded game with locations through a
+save and a reload; another seed's file browsed (its locations not published) and then game 1 of the
+client's seed chosen, through a save and a reload; an erased game started anew, through a save and a
+reload; game 2 through a save and a reload; and on the autotest image a file of another seed refused.
+The settings check without a client (`--expect refused`; `--escape` now expects that too) and a client's
+`skip_intro` 0 on the autotest image passed. By hand, the owner reported on 2026-10-26 that on ares v148
+and Project64 3.0.1, with `tools/bk_hand_client.py`, a game of another seed would not load, a new game
+started with a seed committed, and a game of the same seed loaded (`hack/DUALBOOT.md` of the BKBT
+repository, "Status"). Not shown: the three mid-session reloads (the harness cannot reach them), a
+console.
 
 ## The Archipelago items
 
@@ -693,11 +783,13 @@ locations").
   either later needs
   logic work; BK_Randomizer shuffles neither (its molehill shuffle covers nine moves,
   `docs/upstream-bk-randomizer.md:75-77` of the BKBT repository).
-- **Without a client** (R held with A) the seed stays 0, nothing is applied and the save's moves stay.
-  In this build the molehills taught as in retail; since 2026-10-22 they teach nothing, with a client or
-  without one, and check their locations instead, so without a client no move is learned in play
-  ("Molehills as Archipelago locations"). A client that commits later, during play, makes the moves the
-  mirror from then on (the items check's `--client control`), and the next save keeps that.
+- **Without a client** no game starts or loads since 2026-10-26: A is refused ("The Archipelago
+  settings"). Until then R held with A started one with the seed 0, nothing was applied and the save's
+  moves stayed (in this build the molehills taught as in retail; from 2026-10-22 they taught nothing,
+  "Molehills as Archipelago locations"), and a client that committed later, during play, made the moves
+  the mirror from then on. That client cannot exist any more; the items check's `--client control` is now
+  a client that commits no move at first and sends them at control+20, the way a running game receives
+  them.
 - **Resolved on 2026-10-22: the molehills under a client** (the known issue of this build, until hack
   feature 4). A molehill whose move the client had not sent taught it (`player_unlockAbility`), and on
   the next iteration the mirror unlearned it, so every talk played the lesson for a new move, not the
@@ -710,9 +802,10 @@ locations").
   harmless; the other molehills were not tried. The fix is hack feature 4's first part: the molehills
   check locations instead of teaching, and the jump tutorial is no longer spawned ("Molehills as
   Archipelago locations").
-- **Not done: binding the seed to the save** ("The Archipelago settings"). With the items it is a risk:
-  a save of another seed, or one played without a client, loaded while this slot's client runs, gets
-  this slot's moves mirrored into it, and its next save keeps them. It is the next feature (2026-10-22).
+- **Resolved on 2026-10-26: a save of another seed.** Until the seed was bound to the save, a save of
+  another seed, or one played without a client, loaded while this slot's client ran, got this slot's
+  moves mirrored into it, and its next save kept them. Now the file select refuses such a file ("The
+  Archipelago settings").
 - **A map-flag hazard** (read, not run). The first high jump, flap and flip (`ability_setUsedWithDialog`,
   `src/core2/abilityprogress.c:25-38`) set Spiral Mountain's map flags 8, 9 and `0xA` without looking at
   the map. In retail those moves are taught in Spiral Mountain and first used there; one received
@@ -761,7 +854,10 @@ emulators, the first time a client wrote into this game there; that the attract 
 moves; that loading a game set the learned moves to exactly what it sent; and that the jump molehill
 softlocked, as described above. Not checked: Furnace Fun (read, not run), Bottles' bonus game (mode 8),
 the map-flag hazard, a console (the game reads what the client writes through KSEG0), and a real
-client: none exists for this game yet.
+client: none exists for this game yet. On the build of 2026-10-26 (the seed bound to the save) the items
+check passed `--expect granted`, `kept` (now a client run: a planted save of the client's seed with
+learned `0x1010`, `--moves 4,12`), `granted` with `--reload`, and `boots` on the soak3 image; without a
+client it expects every A refused (`--expect refused`, which replaces `not-granted` and the R + A runs).
 
 ## Molehills as Archipelago locations
 
@@ -771,11 +867,13 @@ game records the checks in `bkbt_ap_locations`, a 20-byte struct that the anchor
 0.4.0 on, one byte per move, which the game writes and the client only reads. A molehill picks its
 first-visit text or its refresher by that byte, not by whether the move is known. This is the first part
 of hack feature 4 (`docs/ROADMAP.md` of the BKBT repository); the vanilla flags of jiggies, honeycombs
-and tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate:
-every hack build, by itself and in the dual-boot image, with a client or with R + A without one; the
-matching build has none of it. Done on 2026-10-22; one byte per move indexed like the items, the game as
-the only writer, and no gate are the owner's decisions of that day. It resolves the known issue of the
-items: the Spiral Mountain molehill that teaches the jumps no longer softlocks under a client.
+and tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate of
+its own: every hack build, by itself and in the dual-boot image (until 2026-10-26 also with R + A
+without a client; since then no game starts without one); the matching build has none of it. Done on
+2026-10-22; one byte per move indexed like the items, the game as the only writer, and no gate are the
+owner's decisions of that day. It resolves the known issue of the items: the Spiral Mountain molehill
+that teaches the jumps no longer softlocks under a client. Since 2026-10-26 the locations are saved with
+the game (below).
 
 - **The layout** (`include/bkbt.h:116-127`), behind the anchor's `+0x14` (`:160`):
 
@@ -832,33 +930,55 @@ items: the Spiral Mountain molehill that teaches the jumps no longer softlocks u
   Not changed: a loaded game goes to the Lair only with all nine Spiral Mountain moves learned and
   progress flag `0xBD` (`chmole_learnedAllSpiralMountainAbilities`, `mole.c:520-532`, in
   `src/core2/ch/gameSelect.c:526-530`), otherwise to Spiral Mountain at the exit from Banjo's house.
-- **No client gate.** R + A without a client plays the same way: the molehills check their locations and
-  teach nothing, and no move arrives, because the items apply only with a committed seed. It is a test
-  path with Archipelago behaviour, there to show that nothing breaks or freezes before a client is set
-  up (the owner's decision of 2026-10-22). "Without a client, play as retail" no longer holds for the
-  molehills.
+- **No client gate of its own.** From 2026-10-22 to 2026-10-26 R + A without a client played the same
+  way: the molehills checked their locations and taught nothing, and no move arrived, because the items
+  apply only with a committed seed (the owner's decision of 2026-10-22: a test path with Archipelago
+  behaviour). Since 2026-10-26 the file select starts no game without a client ("The Archipelago
+  settings"). "Without a client, play as retail" no longer holds for the molehills.
+- **Saved with the game** (2026-10-26). Each game record carries the 20 bytes (`SaveData.move_locations`,
+  `include/save.h:12-16`, at `+0x78`; "The save device"), and `saveData_create` copies
+  `bkbt_ap_locations` into it at every save (`src/core2/code_B5040.c:415-421`). The file select does not
+  load them while a game is only hovered (`saveData_load` sets `bkbt_file_seed` and nothing of the
+  locations): the A that starts or loads a game does, through `bkbt_gameFile_loadAP`
+  (`src/core2/code_B5E00.c:128-136`, `bkbt_saveData_loadAP` in `code_B5040.c:388-398`, prototypes in
+  `include/save.h:26-29`), called at `src/core2/ch/gameSelect.c:563`, so a client sees a file's locations
+  only once the file is chosen. `clearScoreStates` zeroes them (`src/core2/code_956B0.c:1496-1503`): at
+  boot, on entering the file select and at every hover there, at an attract demo, and at Bottles' Bonus,
+  the character parade and the ending, which then reload the game from its record in RAM
+  (`gameFile_load`) and, since 2026-10-26, its locations too
+  (`src/core2/ch/bottlesbonuscursor.c:199-201`, `src/core2/gc/parade.c:156-158`,
+  `src/core2/code_C4320.c:274-276`; until the review of 2026-10-26 found it they stayed 0 after those).
+  Erase (Z) and the sandcastle cheat clear the whole record, seed and locations included
+  (`savedata_clear` over `sizeof(SaveData)`, `code_B5040.c:468-473`, through `gameFile_clear` from
+  `gameSelect.c:310-313` and `src/TTC/ma/castle.c:1035`).
 - **The protocol, for the client** (none exists yet). One writer: the game writes the locations, the
-  client only reads them. The client sends a check for every byte that is not 0 and that it has not sent
-  yet; the server ignores a check it already has. Nothing commits them: a byte goes from 0 to not 0 once,
-  and the game does not clear one during a boot (the locations check judges that).
-- **RAM only, for now.** The locations are initialised data and are not saved, so a reset and each
-  launch from Tooie start them at 0: a molehill then shows its first-visit text again and sets its byte
-  again, which reaches the server as a repeat.
+  client only reads them, and the server only reads what the client sends. The client sends a check for
+  every byte that is not 0 and that it has not sent yet; the server ignores a check it already has.
+  Nothing commits them. **Since 2026-10-26 a byte can go back to 0**: the bytes read 0 in the front end
+  and while a reload is under way, and when another file is chosen they are that file's. So a 0 never
+  means "unchecked" to the client: it only ever adds checks. Within a played file the game does not clear
+  a byte (the locations check judges that). The save buffers checks made while no client is connected,
+  and they are sent once the file is played with one.
+- **After a reset or a launch from Tooie**, a molehill whose check was saved shows its refresher; one
+  checked since the last save shows its first-visit text again and sets its byte again, which reaches the
+  server as a repeat. Until 2026-10-26 they were in RAM only, and every boot started them at 0. A save
+  that lacks checks the server has (a lost save) shows first-visit texts again; the server ignores the
+  repeats: cosmetic.
+- **Open: checks made after the last save, at the three reloads.** Bottles' Bonus, the parade and the
+  ending reload the record in RAM, which holds the last save. If the game does not save before them,
+  checks made since that save drop out of RAM and out of the next save (a connected client has sent them
+  by then, and the molehill would show its first-visit text again). Whether it saves first was read, not
+  settled, and the harness cannot reach these paths.
 - **Lesson rewards repeat.** What a lesson hands out comes with every first-visit text
   (`chmole_additionalAbilityLearnActions`, `mole.c:204-240`): the egg molehill gives 50 eggs (`:224-226`)
-  with eggs not learned (0 to 50, measured), and again after a reset and reload; the flight and
-  Wonderwing lessons give 25 red and 5 gold feathers the same way (`:227-232`; read, not run).
+  with eggs not learned (0 to 50, measured), and again whenever its byte is 0 again (a reset and reload
+  without a save since the talk); the flight and Wonderwing lessons give 25 red and 5 gold feathers the
+  same way (`:227-232`; read, not run).
 - **A save that skipped Bottles' tutorial.** A retail save made after the skip has
   `FILEPROG_DB_SKIPPED_TUTORIAL` set, and there a checked Spiral Mountain molehill shows Bottles'
   refuse-help texts (`ASSET_E0A`..`E0E`) instead of its refresher (`smbottles.c:320-328`; read, not run).
-- **Not done: the seed bound to the save, and the locations in it.** The owner decided on 2026-10-22
-  that this is the next feature: the hack saves in SRAM always, the ROM by itself too, and the save knows
-  its seed, bound per file and checked when a file is chosen (a seed stays committed across Save and
-  Quit). Then the game keeps the locations in the save, still their only writer, which buffers checks
-  made offline, and the server only reads them. A save that lacks checks the server has (a lost save)
-  will then show first-visit texts again, and the server ignores the repeats: cosmetic. Until then the
-  risk of "The Archipelago items" is larger: a save of another seed loaded while this slot's client runs
-  gets this slot's moves, and the checks its molehills make are sent to this slot.
+  Since 2026-10-26 neither a retail save nor one of an earlier hack build loads at all ("The save
+  device"), so only a planted record can carry the flag.
 - **For the tools.** `bkbt_ap_locations` is a global, so the map carries it (`0x80275DA8` in the
   molehills' build of 2026-10-22; the anchor moved to `0x80275DC0` and `bkbt_ptr_ap_item_passes` to
   `0x80275DBC`, `bkbt_ap_items` stayed at `0x80275D94`); all move with every build. The anchor check
@@ -896,6 +1016,15 @@ Not checked: the molehills of the later levels (9 and `0xD`..`0x11`: Treasure Tr
 Cavern, Bubblegloop Swamp, Freezeezy Peak, Gobi's Valley), a console, and a real client: none exists for
 this game yet.
 
+The locations saved, 2026-10-26: on mupen64plus (recompiler) the locations check passed `--expect
+remembered` on Mumbo's Mountain `0xA` (`--save --reload`: the byte in the record saved after the talks,
+in RAM and on disk, with the client's seed; after the reset 0 until A, the saved bytes from A on; talk 3
+the refresher), and `located` on Spiral Mountain 6, the note-door mole `0x12` and, on the autotest image,
+Spiral Mountain 6. Its runs without a client (`--client none`, `--expect nomoves`) now stop with a
+message, since no game starts without one. The seed check showed the locations of a file only after A,
+browsing publishing nothing ("The Archipelago settings"). Not shown: the three mid-session reloads (the
+harness cannot reach them).
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -907,15 +1036,16 @@ this game yet.
   wrong.
 - **No uninitialised global in `src/boot`.** The entry stub clears a fixed number of bytes of the boot
   segment's bss. The link stops with a `BKBT:` message.
-- **core1 + core2 + the largest level overlay have about 66 KB to grow** (68,864 bytes in the first hack
+- **core1 + core2 + the largest level overlay have about 68 KB to grow** (68,864 bytes in the first hack
   build, 68,336 with the dual-boot hook of contract 2, 68,224 with the pad record of 2026-10-12, 66,496
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
-  settings of 2026-10-18, 65,888 with the Archipelago items of that day and 65,792 with the molehills as
-  locations of 2026-10-22: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
+  settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
+  locations of 2026-10-22 and 68,240 with the save in SRAM of 2026-10-26, which no longer links
+  libultra's EEPROM functions: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
   2026-10-15, at `0x80395890` in that of 2026-10-17, at `0x80395960` in that of the settings, at
-  `0x80395AA0` in that of the items and at `0x80395B00` in that of the molehills, read as
-  `lair_VRAM_END`). Every level overlay is loaded at the end of core2
+  `0x80395AA0` in that of the items, at `0x80395B00` in that of the molehills and at `0x80395170` in that
+  of 2026-10-26, read as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
@@ -943,8 +1073,13 @@ this game yet.
   `bkbt_ap_items` ("The Archipelago items"; the anchor check compares the anchor's `+0x10` with it), and,
   since 2026-10-22, its locations, `bkbt_ap_locations` ("Molehills as Archipelago locations"; the anchor
   check compares the anchor's `+0x14` with it), and the game's own `learnedAbilities`, which the items
-  and locations checks read, and `g_Dialog`, which the locations check reads. One static is used without
-  an export: the locations check
+  and locations checks read, and `g_Dialog`, which the locations check reads. Since 2026-10-26 two more
+  globals of `src/core1/code_0.c`: `bkbt_file_seed`, which the seed check reads from the map (and goes
+  without when a build lacks it), and `bkbt_playing_seed`, which no tool reads (the checks judge the seed
+  in the saved record); the seed check also reads `gameNumber`. The tools take the size of a game record
+  from the spacing of `gameFile_saveData[4]` and the `gameFile_GameIdToFileIdMap` behind it, in
+  `bk-fork.json` or an image's info block, and refuse a size they do not know (`tools/bk_eeprom.py` of
+  the BKBT repository). One static is used without an export: the locations check
   writes the player's position, `sPlayerPosition` in `src/core2/playerposition.c`, which has no symbol;
   it takes that file's `.bss` from the map and checks at run time that it holds the position (plausible
   floats, and Banjo moved by the game after the tool's write), and stops as a harness problem otherwise.
@@ -967,8 +1102,8 @@ this game yet.
   - What the image holds outside this ROM (the payload slot at `0x2200000`, the info block behind it, the
     space up to `0x3000000`) cannot be reached through the game's PI functions. Code that needs it brings
     a PI routine of its own, and has to cope with a standalone ROM, where none of it exists. The save
-    device does both: it reaches the SRAM with a handle, through the game's own PI manager, and by
-    itself the ROM keeps its EEPROM.
+    device reaches the SRAM with a handle, through the game's own PI manager; by itself the ROM has the
+    same SRAM, which its exported header declares (until 2026-10-26 it kept its EEPROM there).
   - Nothing may grow the ROM past 16 MiB or into its last 128 KiB (`0xFE0000` and up), which have to stay
     fill: at 64 MiB that is the top of the image, where some flashcarts keep save data. The image builder
     refuses a ROM that uses them. That leaves little: in the hack build of 2026-10-14 the last compressed
@@ -976,4 +1111,5 @@ this game yet.
     before the save device; 22,992 by the image builder's count in the build of 2026-10-17, with the
     Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings; 22,592 in that with
     the Archipelago items, later that day; 22,624 in that of 2026-10-22, with the molehills as
-    locations).
+    locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
+    `0xFDA350`).

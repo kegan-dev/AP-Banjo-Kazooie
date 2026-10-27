@@ -169,6 +169,9 @@ BkbtApSettings bkbt_ap_settings = {
     {0, 0, 0}
 };
 
+u32 bkbt_file_seed = 0;
+u32 bkbt_playing_seed = 0;
+
 /* TRUE once the client has written the settings since this boot: it writes the seed last, and a seed is
  * never 0 (include/bkbt.h). The only place that rule is written down. */
 bool bkbt_apSettingsCommitted(void) {
@@ -296,8 +299,9 @@ void bkbt_init(void) {
 }
 
 /* TRUE when the Tooie launcher started this game, that is, when this ROM runs inside the dual-boot image.
- * The save code picks its device by it (src/core1/eeprom.c): the image has SRAM and no EEPROM. Good from
- * bkbt_init on, which runs before anything else in the game. */
+ * Good from bkbt_init on, which runs before anything else in the game. The save code no longer picks its
+ * device by it (SRAM always since 2026-10-26, src/core1/eeprom.c); tools/bk_fork_info.py still wants it
+ * in the map. */
 bool bkbt_launched(void) {
     return sBkbtLaunched;
 }

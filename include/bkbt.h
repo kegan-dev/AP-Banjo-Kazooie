@@ -117,9 +117,10 @@ extern BkbtApItems bkbt_ap_items;
  * teach). The game writes them and the client only reads them: one writer. A molehill sets its move's
  * byte when the player first talks to it, and the client sends a check for every byte it has not sent
  * yet; the server ignores a check it already has. The molehills also read them, for the first-visit
- * text or the refresher. For now they live in RAM only: every boot starts them at 0, so after a reset or
- * a launch from Tooie a molehill shows its first-visit text again and sets its byte again. Keeping them
- * in the save, with the seed, is the next feature. */
+ * text or the refresher. They are saved with the game (SaveData.move_locations, include/save.h), so the
+ * save also keeps checks made while no client was reading: loaded when A on the file select chooses the
+ * game (never while browsing) and again after the mid-session reloads, zeroed by clearScoreStates. A
+ * byte can go back to 0 when another game is chosen. */
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT];   /* +0x00: indexed by enum ability_e, the move a molehill teaches; not 0 = checked */
 } BkbtApLocations;                  /* 20 bytes; only u8, so no padding */
@@ -161,5 +162,16 @@ typedef struct {
 } BkbtApAnchor;                 /* 24 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
+
+/* The seed saved with the game the file select is showing (saveData_load sets it while browsing,
+ * clearScoreStates zeroes it), for the file select's check against the committed seed. Not for saving. */
+extern u32 bkbt_file_seed;
+
+/* The seed of the game being played: set when A on the file select starts or loads a game (to the
+ * committed seed, which the check there has just matched with the file's, or a new game takes), and
+ * saved with the game by saveData_create. Nothing else writes it, so a client that changes its seed
+ * during play, the mid-session reloads (Bottles' Bonus, the parade, the ending) and clearScoreStates
+ * cannot change the seed a save is bound to. */
+extern u32 bkbt_playing_seed;
 
 #endif

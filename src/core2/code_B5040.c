@@ -4,7 +4,9 @@
 #include "variables.h"
 
 #include "save.h"
-
+#if BKBT
+#include "bkbt.h"
+#endif
 
 typedef struct {
     s16 unk0; // enum volatile_flags_e
@@ -318,10 +320,19 @@ void __savedata_save_abilities(u8 *savedata){ //savedata_save_abilities
 
 s32 savedata_8033CA2C(s32 filenum, SaveData *save_data){
     s32 sp1C;
-    
+
+#if BKBT
+    /* Use SRAM and correctly key off of the size of the data being read */
+    sp1C = bkbt_read(filenum, 0, save_data, sizeof(SaveData));
+#else
     sp1C = eeprom_readBlocks(filenum, 0, save_data, 0xF);
+#endif
     if( sp1C 
+#if BKBT
+        || savedata_verify(sizeof(SaveData), save_data)
+#else
         || savedata_verify(0x78, save_data) 
+#endif
         || ((u8*)save_data)[baseOffset] != 0x11
     ){
         sp1C = 2;
@@ -331,8 +342,13 @@ s32 savedata_8033CA2C(s32 filenum, SaveData *save_data){
 
 s32 savedata_8033CA9C(SaveData *savedata){
     s32 sp1C;
-    
+
+#if BKBT
+    /* Use SRAM and correctly key off of the size of the data being read */
+    sp1C = bkbt_read(0, sizeof(SaveData) * 4, savedata, sizeof(GlobalData));
+#else
     sp1C = eeprom_readBlocks(0, 0x3C, savedata, 0x4);
+#endif
     if( sp1C 
         || savedata_verify(0x20, savedata) 
     ){
@@ -363,7 +379,23 @@ void saveData_load(SaveData *savedata){
     for(i = 0; D_80370A20[i].unk0 != -1; i++){
         volatileFlag_set(D_80370A20[i].unk0, fileProgressFlag_get(D_80370A20[i].unk2));
     }
+#if BKBT
+    /* The seed of the game the file select is showing, for its check (include/bkbt.h) */
+    bkbt_file_seed = savedata->seed;
+#endif
 }
+
+#if BKBT
+/* Load AP specific data into memory. Must be called after a file is selected to
+ * avoid committing location checks for files being hovered by the player */
+void bkbt_saveData_loadAP(SaveData *saveData) {
+    int i;
+
+    for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
+        bkbt_ap_locations.moves[i] = saveData->move_locations[i];
+    }
+}
+#endif
 
 void saveData_create(SaveData *savedata){
     int i;
@@ -380,12 +412,24 @@ void saveData_create(SaveData *savedata){
     __savedata_8033C8A0(savedata);
     __savedata_8033CA2C(savedata);
     __savedata_save_abilities(savedata);
+#if BKBT
+    /* The seed decided when the game was chosen, and the locations checked so far */
+    savedata->seed = bkbt_playing_seed;
+    for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
+        savedata->move_locations[i] = bkbt_ap_locations.moves[i];
+    }
+#endif
     savedata_update_crc(savedata, sizeof(SaveData));
 }
 
 int savedata_8033CC98(s32 filenum, u8 *buffer){
     int out;
+#if BKBT
+    /* Use SRAM and correctly key size of write off of the data type being written */
+    out = bkbt_write(filenum, 0, buffer, sizeof(SaveData));
+#else
     out = eeprom_writeBlocks(filenum, 0, buffer, 0xF);
+#endif
     if(out){
         out = 1;
     }
@@ -394,7 +438,12 @@ int savedata_8033CC98(s32 filenum, u8 *buffer){
 
 int savedata_8033CCD0(s32 filenum){
     int out;
+#if BKBT
+    /* Use SRAM. This is a hard coded write size. Will not change */
+    out = bkbt_write(filenum, 0, D_80383D18, 8);
+#else
     out = eeprom_writeBlocks(filenum, 0, D_80383D18, 1);
+#endif
     if(out){
         out = 1;
     }
@@ -404,7 +453,12 @@ int savedata_8033CCD0(s32 filenum){
 int savedata_8033CE40(u8 *buffer){
     int out;
     savedata_update_crc(buffer, sizeof(GlobalData));
+#if BKBT
+    /* Use SRAM and correctly key size of write off of the data type being written */
+    out = bkbt_write(0, sizeof(SaveData) * 4, buffer, sizeof(GlobalData));
+#else
     out = eeprom_writeBlocks(0, 0x3C, buffer, 4);
+#endif
     if(out){
         out = 1;
     }

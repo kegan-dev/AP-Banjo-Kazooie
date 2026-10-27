@@ -196,6 +196,9 @@ void chBottlesBonusCursor_freeMethod(Actor *this) {
     if (func_8034BAFC() != -1) {
         gameSelect_setGameNumber(func_8034BAFC());
         gameFile_load(func_8034BAFC());
+#if BKBT
+        bkbt_gameFile_loadAP(func_8034BAFC());
+#endif
         func_80347AA8();
     }
     chBottlesBonusCursorMarker = 0;

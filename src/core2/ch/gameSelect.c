@@ -549,13 +549,19 @@ void gameSelect_update(Actor *this) {
 #if BKBT
                 /* No game starts or loads before the client has written the
                  * settings, so that none is played by the wrong ones: A gets
-                 * the buzzer of Z on an empty file. R held with A starts with
-                 * the defaults, for playing without a client; not L + R, which
-                 * blanks the other buttons (src/core1/joy.c). */
-                } else if (face_buttons[FACE_BUTTON(BUTTON_A)] == 1 && side_buttons[SIDE_BUTTON(BUTTON_R)] == 0 && !bkbt_apSettingsCommitted()) {
+                 * the buzzer of Z on an empty file. If the file is not empty,
+                 * then the saved seed must match the committed seed */
+                } else if (face_buttons[FACE_BUTTON(BUTTON_A)] == 1 && (!bkbt_apSettingsCommitted() || (gameFile_isNotEmpty(game_number) && bkbt_file_seed != bkbt_ap_settings.seed))) {
                     coMusicPlayer_playMusic(COMUSIC_2C_BUZZER, 22000);
 #endif
                 } else if (face_buttons[FACE_BUTTON(BUTTON_A)] == 1) { // Select file
+#if BKBT
+                    /* Load AP specific data now that the file is selected.
+                     * Loading here prevents location checks from hovered files
+                     * from being read by the client */
+                    bkbt_playing_seed = bkbt_ap_settings.seed;
+                    bkbt_gameFile_loadAP(game_number);
+#endif
                     if (gameFile_isNotEmpty(game_number)) {
                         if (randf() < 0.1) { // Rarely activate "silly" animations
                             switch (game_number) {

@@ -12,11 +12,11 @@
 #define GAMEFILE_NUM_BLOCKS ROUND_UP_DIVIDE(sizeof(SaveData), EEPROM_BLOCK_SIZE)
 
 #if BKBT
-/* The save device of the dual-boot image. The image is one cartridge with one save device, 32 KiB of SRAM,
- * and no EEPROM. When the launcher started this game (bkbt_launched), the game's 512 bytes of "EEPROM"
- * are 512 bytes of that SRAM instead, from bkbt_sram_offset on (manual_syms.us.v10.txt): block n is the
- * 8 bytes at bkbt_sram_offset + 8 * n. Below that offset the SRAM is the Tooie hack's save. A ROM started
- * by itself never comes here and keeps its EEPROM. One game file is GAMEFILE_NUM_BLOCKS (15) blocks.
+/* The hack's save device: 32 KiB of SRAM, by itself as in the dual-boot image (whose one cartridge has no
+ * EEPROM); the exported ROM's header declares it (hack/build_bk_rom.sh). The game's records, which retail
+ * keeps in a 4 Kbit EEPROM, are bytes of that SRAM from bkbt_sram_offset on (manual_syms.us.v10.txt):
+ * the four game records (SaveData, now with the seed and the locations, include/save.h), then the global
+ * record (GlobalData), BKBT_SRAM_BYTES in all. Below bkbt_sram_offset the SRAM is the Tooie hack's save.
  *
  * The bytes travel as a request (an OSIoMesg) to libultra's PI manager, the thread that does all of this
  * game's cartridge transfers, with an SRAM handle of our own in it. Two reasons for doing it by hand:
@@ -28,7 +28,7 @@
  *
  * Main thread only, like every caller of the two functions at the end of this file: one request, one
  * queue and one buffer serve all transfers, and each call waits until its transfer is done. */
-#define BKBT_SRAM_BYTES (EEPROM_MAXBLOCKS * EEPROM_BLOCK_SIZE) /* 512: the whole EEPROM */
+#define BKBT_SRAM_BYTES (s32)(sizeof(SaveData) * 4 + sizeof(GlobalData)) /* 4 game records and the global one; s32, so that the range check below is signed */
 static OSPiHandle sBkbtSramHandle; /* which device: the SRAM */
 static OSIoMesg sBkbtSramIoMesg;   /* the request sent to the PI manager */
 static OSMesgQueue sBkbtSramQueue; /* where the manager replies */
@@ -40,8 +40,8 @@ static u8 sBkbtSramRaw[BKBT_SRAM_BYTES + 16]; /* 16 spare bytes: sBkbtSramBuf is
  * written back (RAM then holds what the CPU stored, and no dirty line can later land on top of what the
  * DMA brought), and after a read it is invalidated (the CPU then fetches what the DMA brought). Both work
  * on whole 16-byte lines, and a line shared with another variable would take that variable along. The
- * callers' buffers share lines with other variables (the game's save records are 0x78 bytes apart), so
- * this buffer starts on a line boundary and is a whole number of lines long. NULL until the first
+ * callers' buffers share lines with other variables, so this buffer starts on a
+ * line boundary and is a whole number of lines long. NULL until the first
  * transfer since boot (core1_main clears core1's bss).
  *
  * No emulator models the cache: a mistake here passes every test and fails only on a console. */
@@ -69,19 +69,16 @@ static void bkbt_sramTransfer(s32 type, s32 byteOffset, s32 size) {
     }
 }
 
-/* The SRAM side of eeprom_readBlocks and eeprom_writeBlocks. `direction` is OS_READ or OS_WRITE; `address`
- * and `count` are in 8-byte EEPROM blocks, counted from the start of this game's 512 bytes. Returns what
- * the game expects of the EEPROM calls: 0 for success, CONT_RANGE_ERROR (-1) for a range outside the 64
- * blocks (nothing is transferred), CONT_NO_RESPONSE_ERROR (8) for a write that does not read back as
- * written. */
-static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) {
+/* One read or write of the game's save. `direction` is OS_READ or OS_WRITE; `offset` and `size` are in
+ * bytes, `offset` counted from bkbt_sram_offset. Returns what the game's save code expects of retail's
+ * EEPROM calls: 0 for success, CONT_RANGE_ERROR (-1) for a range outside the BKBT_SRAM_BYTES (nothing is
+ * transferred), CONT_NO_RESPONSE_ERROR (8) for a write that does not read back as written. */
+static s32 bkbt_sram(s32 direction, s32 offset, void *buffer, s32 size) {
     s32 i;
-    s32 size = count * EEPROM_BLOCK_SIZE;
-    s32 byteOffset = address * EEPROM_BLOCK_SIZE;
 
-    /* Never outside this game's 64 blocks: below them is the Tooie hack's save, and nothing behind them is
+    /* Never outside this game's bytes: below them is the Tooie hack's save, and nothing behind them is
      * used. Written so that no sum can overflow. */
-    if (address < 0 || count <= 0 || count > EEPROM_MAXBLOCKS - address) {
+    if (offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset) {
         return CONT_RANGE_ERROR;
     }
 
@@ -107,7 +104,7 @@ static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) 
 
     if (direction == OS_WRITE) {
         bcopy(buffer, sBkbtSramBuf, size);
-        bkbt_sramTransfer(OS_MESG_TYPE_EDMAWRITE, byteOffset, size);
+        bkbt_sramTransfer(OS_MESG_TYPE_EDMAWRITE, offset, size);
     }
 
     /* A read, or the read-back of a write. First the buffer gets what a blank EEPROM holds, 0xFF. If
@@ -119,7 +116,7 @@ static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) 
         sBkbtSramBuf[i] = (u8)0xFF;
     }
 
-    bkbt_sramTransfer(OS_MESG_TYPE_EDMAREAD, byteOffset, size);
+    bkbt_sramTransfer(OS_MESG_TYPE_EDMAREAD, offset, size);
 
     if (direction == OS_READ) { /* hand the bytes to the caller */
         bcopy(sBkbtSramBuf, buffer, size);
@@ -127,7 +124,7 @@ static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) 
     }
 
     /* A write counts only if the SRAM reads back what was written. An EEPROM reports a failed write; SRAM
-     * reports nothing, so we look. The game depends on it: gameFile_8033CFD4 (src/core2/code_B5E00.c:88-103)
+     * reports nothing, so we look. The game depends on it: gameFile_8033CFD4 (src/core2/code_B5E00.c)
      * writes a file to the spare slot and wipes that file's old copy only when the write returned 0. A
      * write that returned 0 without the bytes being stored would cost the player that file. */
     for (i = 0; i < size; i++) {
@@ -138,17 +135,27 @@ static s32 bkbt_sramBlocks(s32 direction, s32 address, void *buffer, s32 count) 
 
     return 0;
 }
-#endif
+
+/* The hack's replacements for retail's eeprom_writeBlocks and eeprom_readBlocks, in bytes instead of
+ * 8-byte blocks: `offset` and `count` are bytes, from the start of record `file` (the global record is
+ * file 0, offset 4 * sizeof(SaveData)). */
+s32 bkbt_write(s32 file, s32 offset, void *buffer, s32 count) {
+    s32 address = file * sizeof(SaveData) + offset;
+
+    return bkbt_sram(OS_WRITE, address, buffer, count);
+}
+
+s32 bkbt_read(s32 file, s32 offset, void *buffer, s32 count) {
+    s32 address = file * sizeof(SaveData) + offset;
+
+    return bkbt_sram(OS_READ, address, buffer, count);
+}
+#else
 
 s32 eeprom_writeBlocks(s32 file, s32 offset, void *buffer, s32 count) {
     s32 address = file * GAMEFILE_NUM_BLOCKS + offset;
     s32 ret;
 
-#if BKBT
-    if (bkbt_launched()) {
-        return bkbt_sramBlocks(OS_WRITE, address, buffer, count);
-    }
-#endif
 
     controller_func_8024F35C(3);
     ret = osEepromLongWrite(si_getReplyQueue(), address, buffer, count * EEPROM_BLOCK_SIZE);
@@ -161,11 +168,6 @@ s32 eeprom_readBlocks(s32 file, s32 offset, void *buffer, s32 count) {
     s32 address = file * GAMEFILE_NUM_BLOCKS + offset;
     s32 ret;
 
-#if BKBT
-    if (bkbt_launched()) {
-        return bkbt_sramBlocks(OS_READ, address, buffer, count);
-    }
-#endif
 
     controller_func_8024F35C(3);
     ret = osEepromLongRead(si_getReplyQueue(), address, buffer, count * EEPROM_BLOCK_SIZE);
@@ -173,3 +175,4 @@ s32 eeprom_readBlocks(s32 file, s32 offset, void *buffer, s32 count) {
 
     return ret;
 }
+#endif

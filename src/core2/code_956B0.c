@@ -1,6 +1,9 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void player_walkToPosition(f32 *, f32,  void(*)(ActorMarker *), ActorMarker *);
 extern void func_8028F760(s32, f32, f32);
@@ -1479,6 +1482,9 @@ void func_8031FB6C(s32 arg0, s32 arg1) {
 }
 
 void clearScoreStates(void) {
+#if BKBT
+    int i;
+#endif
     bsStoredState_clear();
     fileprogressflag_func_8031FFAC();
     item_setItemsStartCounts();
@@ -1487,6 +1493,14 @@ void clearScoreStates(void) {
     mumboscore_clear();
     volatileFlag_clear();
     func_802D6344();
+#if BKBT
+    /* BKBT scores should also be cleared to prevent stale data living through
+     * demos and game select. */
+    bkbt_file_seed = 0;
+    for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
+        bkbt_ap_locations.moves[i] = 0;
+    }
+#endif
 }
 
 // Mostly does nothing, but it resets the selected game in the file select screen (even if it does get re-written right after)
