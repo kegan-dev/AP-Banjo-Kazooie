@@ -111,6 +111,16 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     the anchor itself is unchanged). `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ba/marker.c`,
     `src/core2/code_BEF20.c`, `src/core2/code_B5E00.c`, `src/core2/code_956B0.c` ("Empty honeycombs as
     Archipelago items and locations" below).
+15. **Jiggies as Archipelago items and locations** (2026-10-27; `docs/ROADMAP.md` of the BKBT repository,
+    hack features 3 and 4): picking up a jiggy is a check (the game's own bit, which it saves itself) and no
+    longer adds to the jiggies held; the game publishes those bits as 101 bytes behind the honeycomb bytes
+    of `bkbt_ap_locations`, and gives the jiggies of `bkbt_ap_items.jiggies` the client writes that are
+    above the jiggies it has given, a count it saves in the game record beside the jiggies held (layout
+    0.6.0; the anchor itself is unchanged). The Lair's puzzles spend the jiggies held as in retail. The
+    level's found count no longer shows its counter: the held-jiggy counter is the only jiggy count on the
+    screen. `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`, `src/core2/ba/marker.c`,
+    `src/core2/code_B5040.c`, `src/core2/code_BEF20.c`, `src/core2/code_956B0.c` ("Jiggies as Archipelago
+    items and locations" below).
 
 ## The frame hook
 
@@ -286,7 +296,8 @@ repository, "The save device".
 
 - **The layout** (`include/save.h:7-24`). The four game records (`SaveData`) one behind the other, then
   the global record (`GlobalData`, `0x20` bytes). A game record is retail's `+0x00..+0x73` (magic,
-  `slotIndex`, the game's data, `padding[2]`), then under `#if BKBT` (`:12-16`) `u32 seed` at `+0x74` and
+  `slotIndex`, the game's data, `padding[2]`, whose first byte the hack build uses since 2026-10-27 for
+  the jiggies given, "Jiggies as Archipelago items and locations"), then under `#if BKBT` `u32 seed` at `+0x74` and
   `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
   Archipelago locations"), then the checksum at `+0x8C`: `0x90` bytes, retail `0x78`. In the SRAM: the
   records at `0x7000`, `0x7090`, `0x7120`, `0x71B0`, the global record at `0x7240`, this game's part
@@ -494,25 +505,26 @@ With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the K
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
 settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
-same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, which grew the structs it points to). An
+same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, and 0.6.0, the jiggies of 2026-10-27,
+which grew the structs it points to). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:155-189`), big-endian like everything the client reads, version 0.5.0
-  since the honeycombs of 2026-10-26 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
-  day, 0.4.0 with the molehills of 2026-10-22):
+- **The layout** (`include/bkbt.h:170-204`), big-endian like everything the client reads, version 0.6.0
+  since the jiggies of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
+  day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26):
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 in 0.4.0) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 5 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0) |
+  | `+0x0A` | `u8 version_minor` | 6 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -521,7 +533,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
   layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
-  from 20 to 48, behind an unchanged anchor. Later features append
+  from 20 to 48, and in 0.6.0 the locations to 152 (the items took a byte of their padding), behind an
+  unchanged anchor. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -722,8 +735,9 @@ console.
 With `BKBT=1` the game gives the player what an Archipelago client says was received: `bkbt_ap_items`,
 a 20-byte struct that the anchor points to from layout 0.3.0 on. This first version holds the moves
 only, one byte per move; since layout 0.5.0 (2026-10-26) a byte behind them holds the empty honeycombs
-received, which have a section of their own ("Empty honeycombs as Archipelago items and locations");
-the other counted kinds (notes, tokens, jiggies, jinjos) and traps are to come (`docs/ROADMAP.md` of
+received, which have a section of their own ("Empty honeycombs as Archipelago items and locations"), and
+since layout 0.6.0 (2026-10-27) the next byte holds the jiggies received ("Jiggies as Archipelago items and
+locations"); the other counted kinds (notes, tokens, jinjos) and traps are to come (`docs/ROADMAP.md` of
 the BKBT repository, hack feature 3). The client writes totals, as the Tooie
 client writes counts of what was received (`docs/upstream-banjo-tooie.md` of the BKBT repository), and
 the game makes its learned moves the mirror of them: while the seed is committed and a file is played,
@@ -880,8 +894,9 @@ game records the checks in `bkbt_ap_locations`, a 20-byte struct that the anchor
 0.4.0 on, one byte per move, which the game writes and the client only reads. A molehill picks its
 first-visit text or its refresher by that byte, not by whether the move is known. This is the first part
 of hack feature 4 (`docs/ROADMAP.md` of the BKBT repository); the empty honeycombs followed on
-2026-10-26, as 25 bytes behind these 20 ("Empty honeycombs as Archipelago items and locations"), and
-jiggies, tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate of
+2026-10-26, as 25 bytes behind these 20 ("Empty honeycombs as Archipelago items and locations"), the
+jiggies on 2026-10-27, as 101 bytes behind those ("Jiggies as Archipelago items and locations"), and
+tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate of
 its own: every hack build, by itself and in the dual-boot image (until 2026-10-26 also with R + A
 without a client; since then no game starts without one); the matching build has none of it. Done on
 2026-10-22; one byte per move indexed like the items, the game as the only writer, and no gate are the
@@ -1128,6 +1143,90 @@ the SM Colliwobble's and Quarries' honeycombs and the attract demos. Not checked
 spawned by events outside Spiral Mountain, the ROM by itself by hand, a console, any client but the
 stand-ins.
 
+## Jiggies as Archipelago items and locations
+
+With `BKBT=1` the 100 jiggies are Archipelago locations and the jiggy is an Archipelago item. Picking one
+up checks its location and no longer adds to the jiggies held; the game gives the jiggies the client says
+were received, and the Lair's puzzles spend them as in retail. There is no switch: every hack build, by
+itself and in the dual-boot image; the matching build has none of it. Done on 2026-10-27
+(`docs/ROADMAP.md` of the BKBT repository, hack features 3 and 4), built by Claude with the owner
+reviewing. The owner's decisions of that day: the checks are bytes in the locations struct, as for the
+honeycombs; a received jiggy shows with the game's own held-jiggy counter; the puzzle costs stay retail's
+for now.
+
+- **How retail does it** (read from the decomp; `docs/bk-decomp-notes.md` of the BKBT repository,
+  "Jiggies"). One bit per jiggy in `jiggyscore` (`src/core2/jiggyscore.c:11-14`; jiggy n, `enum jiggy_e`
+  1..`0x64` in `include/enums.h:1514-1616`, is bit `n & 7` of byte `(n - 1) / 8`), set only by the pickup
+  (`src/core2/ba/marker.c:548`) and saved in each game record at `+0x02..+0x0E`; every jiggy despawns at
+  init when its bit is set (`src/core2/ch/jiggy.c:147-148`), so the 55 spawned by events need nothing
+  either. Three counts: `ITEM_E_JIGGY`, the jiggies found in the level, rebuilt from the bits at every level
+  load and counted up by the jig dance with its HUD (`src/core2/bs/jig.c:68-72`); `ITEM_26_JIGGY_TOTAL`,
+  the jiggies held, which the pickup raises by 1 without a HUD (`marker.c:549`), the puzzles spend and
+  give back (`src/lair/jigsawpicture.c:362-415`), and the game **saves** (saved items byte 4, record
+  `+0x69`, `src/core2/code_BEF20.c:489-499`, restored at `:570-577`); and `ITEM_2B_UNKNOWN`, a copy of it
+  for the podium's counter, which `item_adjustByDiff` moves by every diff asked for `ITEM_26`, even one its
+  clamp at 0 refuses (`code_BEF20.c:80`, `:149-151`). The sandcastle cheats of Treasure Trove Cove fill
+  the puzzles of CC to CCW without spending (`src/TTC/ma/castle.c:954-1016`), so the jiggies held are not
+  the jiggies received minus the pieces placed.
+- **The layout** (`include/bkbt.h:103-168`; layout 0.6.0, `BKBT_AP_VERSION_MINOR` 6): the items keep 24
+  bytes, `+0x15 u8 jiggies` taken from their padding (the total received, read as at most
+  `BKBT_AP_JIGGY_MAX`, 100); the locations append `+0x30 u8 jiggies[BKBT_AP_JIGGY_SLOTS]` (`0x65`, indexed
+  by `enum jiggy_e`, `[0]` never set, not 0 = picked up) and 3 bytes of padding behind the honeycombs'
+  padding, which stays at `+0x2D`: 152 bytes. A client writes the total only to a ROM whose anchor says
+  0.6.0 or later: in a 0.5.0 ROM `+0x15` is padding.
+- **The jiggies given, saved.** The honeycomb counts are rebuilt at every load, so the hack rebuilds them
+  from the client's total; the jiggies held are saved and spent, so the hack keeps `bkbt_jiggies_given`
+  (`src/core1/code_0.c`, a global, declared in `include/bkbt.h`), the received jiggies it has given, and
+  gives only what the total is above it. It is saved in the record's first padding byte, `+0x72`
+  (`SaveData.jiggies_given`, `include/save.h`, under `#if BKBT`; the matching build keeps `padding[2]`,
+  and the record stays `0x90` bytes): written by `saveData_create` (`src/core2/code_B5040.c`) in the same
+  call that saves the jiggies held, read back by `bkbt_saveData_loadAP` right after the game's own load
+  (at A and after the three mid-session reloads), zeroed by `clearScoreStates`. So a reset or a reload
+  always brings back a matching pair, and nothing recomputes the jiggies held: puzzles and cheats behave
+  as in retail.
+- **Locations.** Under `#if BKBT` the pickup (`marker.c`, the jiggy case) no longer raises the jiggies
+  held; the bit, the BGS timer stop, the first-jiggy texts, the Jinjo fanfare and the dance stay.
+  `bkbt_apJiggies` (`code_0.c`), called from `bkbt_frame` after the honeycombs, copies the 100 bits into
+  the locations on every main-loop iteration while `bkbt_file_chosen`; `clearScoreStates` zeroes the copy.
+- **Items.** `bkbt_apJiggies` then, under the items' gate and while Banjo is in the map, placed and not
+  dying: a total above the jiggies given goes into `ITEM_26` in one `item_adjustByDiff` call with the HUD,
+  which counts up by itself (retail's refills add their whole amount in one call); before it, when the
+  held-jiggy counter is not on the screen, its shown number (`itemPrintValues`, `src/core2/code_73640.c:88`)
+  is set to the jiggies held, so that it counts up from there after a puzzle spent jiggies or a lower total
+  took some; while a puzzle podium's counter (`ITEM_2B`'s) is up, without the HUD, the podium's counter
+  showing the rise. A total below the jiggies given takes back quietly what it can from the jiggies held,
+  never from a puzzle, and lowers the jiggies given only by what it took: the rest stays given, so a total
+  that dips and comes back gives nothing twice.
+- **One jiggy counter on the screen.** The level's found count (`ITEM_E_JIGGY`) counts the checks made in
+  the level, not jiggies the player has. In the owner's first hand test (Project64 3.0.1, 2026-10-27) its
+  counter came up after the dance, beside the held-jiggy counter that showed the jiggy the client sent, and
+  confused. Under `#if BKBT`, `item_adjustByDiff` (`src/core2/code_BEF20.c`) never shows it, whoever asks:
+  retail asks from the jig (`src/core2/bs/jig.c:70`, `:102`) and from the pickups that skip it, in
+  flight, swimming or mid-jump (`src/core2/code_14420.c:935`, `:946`), and nothing else prints it (the pause menu shows the jiggies held
+  and hides it, `src/core2/gc/pauseMenu.c:133`, `:145`). It still counts, because a level's tenth jiggy
+  reads it for the note door's jig and fanfare (`bs/jig.c:38`, `code_14420.c:908`).
+- **For the tools.** `bkbt_jiggies_given` is a global, so it needs no exported pointer. The BKBT
+  repository's jiggy check (`tools/bk_jiggy_check.py`) reads it and, from the map, `D_80385F30` (the item
+  counts), `jiggyscore`, `gFileProgressFlags` (+8, the puzzles' pieces placed), `itemPrintValues` and
+  `D_803692F8` (the counters on the screen, for the state of the level count's counter), all globals; the anchor check wants 0.6.0 and room for the 152 bytes in the map; the stand-in client, the
+  seed check and the hand client write or read the jiggy bytes from 0.6.0 on.
+- **What it costs.** 576 bytes of RAM headroom (lair ends at `0x80395590`, `lair_VRAM_END`) and 160 of ROM
+  room (23,376 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** A save of a build before the jiggies holds the jiggies picked up and counted and none
+  given, so the client's total lands on top of them. A total lowered below what the puzzles hold leaves
+  the jiggies held at 0 and the rest given. A puzzle the sandcastle filled cost nothing and C-down on it
+  gives jiggies, as in retail. A jiggy picked up and a total given since the last save are picked up and
+  given again after a reset. The 100-jiggy ending and the pause totals count the jiggies picked up. A
+  held-jiggy counter already on the screen when Banjo reaches a podium can overlap the podium's counter
+  until it hides (3 s).
+
+Checked on mupen64plus on 2026-10-27 with the BKBT repository's jiggy check, the seed check and the
+anchor check (`hack/DUALBOOT.md` of the BKBT repository, "Checked"): see there for the list. The owner
+tried it by hand the same day on Project64 3.0.1 and ares v148 with the BKBT repository's hand client, in
+the dual-boot image, a jiggy spawned by an event, Treasure Trove Cove's podium and C-down included
+(`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not checked: a console, any client but the
+stand-ins, the ROM by itself by hand.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1145,11 +1244,13 @@ stand-ins.
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
   settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
-  libultra's EEPROM functions, and 67,760 with the honeycombs of that day: the largest, lair, ends at
+  libultra's EEPROM functions, 67,760 with the honeycombs of that day, and 67,184 with the jiggies of
+  2026-10-27: the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
-  the molehills, at `0x80395170` in that of the save in SRAM and at `0x80395350` in that of the
-  honeycombs, read as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
+  the molehills, at `0x80395170` in that of the save in SRAM, at `0x80395350` in that of the
+  honeycombs and at `0x80395590` in that of the jiggies, read as `lair_VRAM_END`). Every level overlay is
+  loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
@@ -1186,7 +1287,10 @@ stand-ins.
   in the saved record); the seed check also reads `gameNumber`. Since the honeycombs of that day
   `bkbt_file_chosen`, which no tool reads, and the game's own `sHoneycombScore`, `D_80385F30` (the item
   counts), `D_80383084` (the pause block counter) and `D_803815C0` (the HUD's trade state), which the
-  honeycomb check reads (the seed check writes `sHoneycombScore` to stand in for a pickup). The tools take the size of a game record
+  honeycomb check reads (the seed check writes `sHoneycombScore` to stand in for a pickup). Since the
+  jiggies of 2026-10-27 `bkbt_jiggies_given` and the game's own `jiggyscore`, `gFileProgressFlags` and
+  `itemPrintValues`, which the jiggy check reads (the seed check writes `jiggyscore` to stand in for a
+  pickup). The tools take the size of a game record
   from the spacing of `gameFile_saveData[4]` and the `gameFile_GameIdToFileIdMap` behind it, in
   `bk-fork.json` or an image's info block, and refuse a size they do not know (`tools/bk_eeprom.py` of
   the BKBT repository). One static is used without an export: the locations check
@@ -1222,4 +1326,5 @@ stand-ins.
     Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings; 22,592 in that with
     the Archipelago items, later that day; 22,624 in that of 2026-10-22, with the molehills as
     locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
-    `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`).
+    `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`; 23,376 in that
+    with the jiggies of 2026-10-27, fill from `0xFDA4B0`).

@@ -60,7 +60,16 @@ s32 item_adjustByDiff(enum item_e item, s32 diff, s32 no_hud){
     s32 sp30;
     s32 sp2C;
     s32 sp28;
-    
+
+#if BKBT
+    /* The level's found count (raised by the jig, bs/jig.c:70, 102, and by the pickups that skip it,
+       code_14420.c:935, 946) counts the checks made in the level, not jiggies the player has, which come
+       from the client and show on the held-jiggy counter (bkbt_apJiggies). Never show it. It still
+       counts: a level's tenth jiggy reads it for the note door's jig and fanfare (bs/jig.c:38;
+       code_14420.c:908). */
+    if(item == ITEM_E_JIGGY)
+        no_hud = TRUE;
+#endif
     oldVal = D_80385F30[item];
 
     if(ucode_stub3())

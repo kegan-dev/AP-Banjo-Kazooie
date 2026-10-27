@@ -1500,11 +1500,16 @@ void clearScoreStates(void) {
     for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
         bkbt_ap_locations.moves[i] = 0;
     }
-    /* The honeycombs just cleared above belong to no chosen game until bkbt_gameFile_loadAP. */
+    /* The honeycombs and jiggies just cleared above belong to no chosen game until bkbt_gameFile_loadAP,
+     * and neither do the jiggies given that went with the held count item_setItemsStartCounts cleared. */
     bkbt_file_chosen = FALSE;
     for (i = 0; i < BKBT_AP_HONEYCOMB_SLOTS; i++) {
         bkbt_ap_locations.honeycombs[i] = 0;
     }
+    for (i = 0; i < BKBT_AP_JIGGY_SLOTS; i++) {
+        bkbt_ap_locations.jiggies[i] = 0;
+    }
+    bkbt_jiggies_given = 0;
 #endif
 }
 

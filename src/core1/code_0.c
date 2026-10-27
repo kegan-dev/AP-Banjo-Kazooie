@@ -201,8 +201,8 @@ const BkbtApSettings *bkbt_apSettings(void) {
 BkbtApItems bkbt_ap_items = { { 0 } };
 
 /* The Archipelago locations (include/bkbt.h): written by the game (the molehills, src/core2/ch/mole.c and
- * src/SM/ch/smbottles.c; the honeycombs, bkbt_apHoneycombs below), read by the client, all 0 at every
- * boot. */
+ * src/SM/ch/smbottles.c; the honeycombs and the jiggies, bkbt_apHoneycombs and bkbt_apJiggies below),
+ * read by the client, all 0 at every boot. */
 BkbtApLocations bkbt_ap_locations = { { 0 } };
 
 /* mainLoop iterations on which bkbt_frame copied the items from the client. For the
@@ -221,6 +221,11 @@ u32 *bkbt_ptr_ap_item_passes = &sBkbtApItemPasses;
 static s32 sBkbtApHoneycombsGiven;
 s32 *bkbt_ptr_ap_honeycombs_given = &sBkbtApHoneycombsGiven;
 
+/* The jiggies received that the game has given (include/bkbt.h). Saved with the game, unlike the counter
+ * above, because what it went into is saved too. A global, so that the save code sees it and the map
+ * carries it for the tools. */
+s32 bkbt_jiggies_given = 0;
+
 /* core2 functions used below that no header declares. */
 bool honeycombscore_get(enum honeycomb_e indx);                /* src/core2/honeycombscore.c */
 s32 honeycombscore_get_total(void);                            /* src/core2/honeycombscore.c */
@@ -231,6 +236,10 @@ void func_8034789C(void);         /* src/core2/code_BEF20.c: rebuilds the honeyc
 void gcpausemenu_80314AC8(int arg0); /* src/core2/gc/pauseMenu.c: 0 adds a block on the pause menu, 1 lifts one */
 bool func_8028F070(void);         /* src/core2/code_7060.c: Banjo is in the map and placed (player_draw draws him) */
 bool player_isDead(void);         /* src/core2/code_7060.c */
+u32 jiggyscore_isCollected(enum jiggy_e jiggy_id);             /* src/core2/jiggyscore.c */
+s32 item_adjustByDiff(enum item_e item, s32 diff, s32 no_hud); /* src/core2/code_BEF20.c */
+bool func_802FADD4(enum item_e item_id); /* src/core2/code_73640.c: the item's HUD counter is showing or coming in */
+extern f32 itemPrintValues[];            /* src/core2/code_73640.c: the number each HUD counter shows */
 
 static bool bkbt_apItemsAllowed(void) {
     enum map_e map;
@@ -317,6 +326,57 @@ static void bkbt_apHoneycombs(void) {
          * and an adjustment by 0 clamps the health to the lower total without a HUD. */
         func_8034789C();
         item_adjustByDiffWithoutHud(ITEM_13_EMPTY_HONEYCOMB, 0);
+    }
+}
+
+/* The jiggies (include/bkbt.h), on every mainLoop iteration while the chosen game is in play. */
+static void bkbt_apJiggies(void) {
+    s32 id;
+    s32 received;
+    s32 held;
+    s32 take;
+
+    if (!bkbt_file_chosen) {
+        return;
+    }
+
+    /* The locations: a copy of the game's own record of the jiggies picked up, which the jiggies, the
+     * characters and switches that spawn them, the pause menu, the endings and the save keep reading. */
+    for (id = 1; id < BKBT_AP_JIGGY_SLOTS; id++) {
+        bkbt_ap_locations.jiggies[id] = jiggyscore_isCollected(id) != 0;
+    }
+
+    /* The items go into the game's held count, ITEM_26_JIGGY_TOTAL, the one the Lair's puzzles spend. It
+     * is changed only through item_adjustByDiff, which moves the puzzles' copy of it (ITEM_2B_UNKNOWN) by
+     * the same amount, and never below 0, where that copy would go on without it. Only while Banjo is
+     * about, as for the honeycombs. */
+    if (!bkbt_apItemsAllowed() || !func_8028F070() || player_isDead()) {
+        return;
+    }
+    received = MIN(bkbt_ap_items.jiggies, BKBT_AP_JIGGY_MAX);
+    held = item_getCount(ITEM_26_JIGGY_TOTAL);
+    if (received > bkbt_jiggies_given) {
+        if (func_802FADD4(ITEM_2B_UNKNOWN)) {
+            /* At a puzzle, whose own counter shows the new count, in the same place on the screen. */
+            item_adjustByDiff(ITEM_26_JIGGY_TOTAL, received - bkbt_jiggies_given, TRUE);
+        } else {
+            /* The held-jiggy counter counts up from what it shows, which is out of date when a puzzle
+             * spent jiggies or a lower total took some since it was last on the screen. */
+            if (!func_802FADD4(ITEM_26_JIGGY_TOTAL)) {
+                itemPrintValues[ITEM_26_JIGGY_TOTAL] = held;
+            }
+            item_adjustByDiff(ITEM_26_JIGGY_TOTAL, received - bkbt_jiggies_given, FALSE);
+        }
+        bkbt_jiggies_given = received;
+    } else if (received < bkbt_jiggies_given) {
+        /* Fewer than given (a client's mistake, or a test): take them back quietly from what is held,
+         * never from the puzzles. What cannot be taken stays given, so that the total going back up
+         * gives nothing twice. */
+        take = MIN(bkbt_jiggies_given - received, held);
+        if (take > 0) {
+            item_adjustByDiff(ITEM_26_JIGGY_TOTAL, -take, TRUE);
+            bkbt_jiggies_given -= take;
+        }
     }
 }
 
@@ -426,6 +486,7 @@ void bkbt_frame(void) {
     /* Sync the moves with the AP client every frame */
     bkbt_apApplyItems();
     bkbt_apHoneycombs();
+    bkbt_apJiggies();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the

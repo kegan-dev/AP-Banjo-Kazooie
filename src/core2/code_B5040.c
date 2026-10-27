@@ -394,6 +394,8 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
     for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
         bkbt_ap_locations.moves[i] = saveData->move_locations[i];
     }
+    /* The jiggies given, to go with the held count gameFile_load has just put back from the same record */
+    bkbt_jiggies_given = saveData->jiggies_given;
 }
 #endif
 
@@ -413,11 +415,13 @@ void saveData_create(SaveData *savedata){
     __savedata_8033CA2C(savedata);
     __savedata_save_abilities(savedata);
 #if BKBT
-    /* The seed decided when the game was chosen, and the locations checked so far */
+    /* The seed decided when the game was chosen, the locations checked so far, and the jiggies given,
+     * which the held count saved above (__savedata_8033CA2C) includes */
     savedata->seed = bkbt_playing_seed;
     for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
         savedata->move_locations[i] = bkbt_ap_locations.moves[i];
     }
+    savedata->jiggies_given = bkbt_jiggies_given;
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));
 }

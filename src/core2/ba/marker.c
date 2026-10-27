@@ -546,7 +546,13 @@ void __baMarker_resolveCollision(Prop *other_prop){
                         || (player_isStable() && !(3600.0f < ml_distanceSquared_vec3f(actor->position, spA0)))
                     ){
                         jiggyscore_setCollected(jiggy_id, TRUE);
+#if BKBT
+                        /* An Archipelago location: the bit set above is the check (src/core1/code_0.c copies
+                         * it for the client). The jiggy is not added to the held count here; the client's
+                         * total is, when it arrives (bkbt_apJiggies). */
+#else
                         item_adjustByDiffWithoutHud(ITEM_26_JIGGY_TOTAL, 1);
+#endif
                         if(jiggy_id == JIGGY_20_BGS_ELEVATED_WALKWAY || jiggy_id == JIGGY_25_BGS_MAZE){
                             func_802D6924();
                         }

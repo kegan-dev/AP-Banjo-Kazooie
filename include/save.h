@@ -8,7 +8,14 @@ typedef struct{
     u8 magic;
     u8 slotIndex;
     u8 data[0x70];
+#if BKBT
+    /* Retail's padding, never written by retail: the jiggies received that this game had given when it
+     * was saved (bkbt_jiggies_given), saved in the same record as the held count it went into */
+    u8 jiggies_given;
+    u8 padding;
+#else
     u8 padding[0x2];
+#endif
 #if BKBT
     /* The seed the game is bound to and its checked locations (bkbt_ap_locations), saved with it */
     u32 seed;
