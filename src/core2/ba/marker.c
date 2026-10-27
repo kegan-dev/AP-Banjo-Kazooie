@@ -578,10 +578,16 @@ void __baMarker_resolveCollision(Prop *other_prop){
                         honeycombscore_set(sp98, 1);
                         coMusicPlayer_playMusic(COMUSIC_17_EMPTY_HONEYCOMB_COLLECTED, 28000);
                         timedFunc_set_1(2.0f, progressDialog_showDialogMaskZero, FILEPROG_B_EMPTY_HONEYCOMB_TEXT);
+#if BKBT
+                        /* An Archipelago location: the bit set above is the check (src/core1/code_0.c copies
+                         * it for the client). The piece is not counted here; the client's total is, when it
+                         * arrives (bkbt_apHoneycombs), with the pause block that goes with a sixth piece. */
+#else
                         item_inc(ITEM_13_EMPTY_HONEYCOMB);
                         if(!(item_getCount(ITEM_13_EMPTY_HONEYCOMB) < 6)){
                             gcpausemenu_80314AC8(0);
                         }
+#endif
                         fxSparkle_emptyHoneycomb(&other_prop->actorProp.position_x);
                         marker_despawn(marker);
                     }

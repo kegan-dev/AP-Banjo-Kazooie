@@ -44,7 +44,7 @@ extern u8 bkbt_contract[];
 #define BKBT_FLAG_CHORD_ANYWHERE 0x00000001 /* the chord also works outside the front end */
 
 /* The save device of the dual-boot image is 32 KiB of SRAM, shared with the Tooie hack, and this game's
- * save is 512 bytes of it (src/core1/eeprom.c), from the linker symbol bkbt_sram_offset on
+ * save is BKBT_SRAM_BYTES of it (src/core1/eeprom.c), from the linker symbol bkbt_sram_offset on
  * (manual_syms.us.v10.txt). An offset into the SRAM, not an address: use it as (u32) bkbt_sram_offset.
  * The Tooie side's copy is DUALBOOT_BK_SRAM_OFFSET in hack/bt/n64/src/dualboot.h of the BKBT repository. */
 extern u8 bkbt_sram_offset[];
@@ -100,32 +100,57 @@ bool bkbt_padButton(u16 *button);  /* src/core1/joy.c: FALSE while the pad has n
 const BkbtApSettings *bkbt_apSettings(void); /* src/core1/code_0.c: the settings to play by, the client's or the defaults */
 bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once the client has written the settings since boot */
 
-/* The items the player has received (hack feature 3; version 1: moves). The client writes them and this
- * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
- * nothing new; what the game has already given is kept in its own save. The seed commits these as well:
- * the client writes the settings and the items first and the seed last, and starts from seed 0 to change
- * them in a running game. Every boot starts them at 0, like the settings. */
+/* The items the player has received (hack feature 3: the moves since layout 0.3.0, the empty honeycombs
+ * since 0.5.0). The client writes them and this game only reads them: one writer. They are totals,
+ * written again and again, so a repeated write gives nothing new. The seed commits these as well: the
+ * client writes the settings and the items first and the seed last, and starts from seed 0 to change
+ * them in a running game. Every boot starts them at 0, like the settings. A client writes honeycombs
+ * only to a ROM whose anchor says 0.5.0 or later: in a 0.4.0 ROM the byte after the moves is the first
+ * byte of bkbt_ap_locations. */
 #define BKBT_AP_MOVE_COUNT 20 /* the values of enum ability_e, 0..0x13 (include/core2/abilityprogress.h) */
+#define BKBT_AP_HONEYCOMB_MAX 24 /* empty honeycombs in the game, enum honeycomb_e 1..0x18 (include/enums.h) */
 
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
-} BkbtApItems;                    /* 20 bytes; only u8, so no padding */
+    u8 honeycombs;                /* +0x14: empty honeycombs received; more than BKBT_AP_HONEYCOMB_MAX reads as that (since 0.5.0) */
+    u8 padding[3];                /* +0x15: 0. Named, so that the room left for the next field is visible */
+} BkbtApItems;                    /* 24 bytes */
 
 extern BkbtApItems bkbt_ap_items;
 
-/* The locations the player has checked (hack feature 4; version 1: the molehills, one per move they
- * teach). The game writes them and the client only reads them: one writer. A molehill sets its move's
- * byte when the player first talks to it, and the client sends a check for every byte it has not sent
- * yet; the server ignores a check it already has. The molehills also read them, for the first-visit
- * text or the refresher. They are saved with the game (SaveData.move_locations, include/save.h), so the
- * save also keeps checks made while no client was reading: loaded when A on the file select chooses the
- * game (never while browsing) and again after the mid-session reloads, zeroed by clearScoreStates. A
- * byte can go back to 0 when another game is chosen. */
+/* The locations the player has checked (hack feature 4: the molehills since layout 0.4.0, the empty
+ * honeycombs since 0.5.0). The game writes them and the client only reads them: one writer. The client
+ * sends a check for every byte that is not 0 and that it has not sent yet; the server ignores a check it
+ * already has. A byte can go back to 0 when another game is chosen, so a client only ever adds checks.
+ *
+ * The molehills: a molehill sets its move's byte when the player first talks to it, and reads it back
+ * for the first-visit text or the refresher. Saved with the game (SaveData.move_locations,
+ * include/save.h), so the save also keeps checks made while no client was reading: loaded when A on the
+ * file select chooses the game (never while browsing) and again after the mid-session reloads, zeroed by
+ * clearScoreStates.
+ *
+ * The honeycombs: a copy of the game's own record of the empty honeycombs picked up
+ * (src/core2/honeycombscore.c, which the game saves itself), made on every main-loop iteration while the
+ * chosen game is in play (bkbt_file_chosen), so never from a file the file select is only showing. */
+#define BKBT_AP_HONEYCOMB_SLOTS 0x19 /* indexed by enum honeycomb_e, 1..0x18; [0] is never set (HONEYCOMB_COUNT in src/core2/honeycombscore.c) */
+
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT];   /* +0x00: indexed by enum ability_e, the move a molehill teaches; not 0 = checked */
-} BkbtApLocations;                  /* 20 bytes; only u8, so no padding */
+    u8 honeycombs[BKBT_AP_HONEYCOMB_SLOTS]; /* +0x14: indexed by enum honeycomb_e; not 0 = picked up (since 0.5.0) */
+    u8 padding[3];                  /* +0x2D: 0 */
+} BkbtApLocations;                  /* 48 bytes */
 
 extern BkbtApLocations bkbt_ap_locations;
+
+/* TRUE while the game's score state (the honeycombs picked up, among others) is that of the game chosen
+ * with A on the file select. Set where A chooses a game and after the mid-session reloads
+ * (bkbt_gameFile_loadAP), cleared by clearScoreStates, which runs before the file select shows a file
+ * and before a demo. Only the game and its pickups change the score state in between. */
+extern bool bkbt_file_chosen;
+
+/* src/core1/code_0.c: the number of empty honeycombs the game's own counts stand for, for the
+ * rebuild of the counts (func_8034789C, src/core2/code_BEF20.c) while bkbt_file_chosen. */
+s32 bkbt_apHoneycombsForHealth(void);
 
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
@@ -140,7 +165,7 @@ extern BkbtApLocations bkbt_ap_locations;
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 4
+#define BKBT_AP_VERSION_MINOR 5
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -157,8 +182,8 @@ typedef struct {
     u8 version_minor;           /* +0x0A */
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
-    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0) */
-    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0) */
+    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0) */
+    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0) */
 } BkbtApAnchor;                 /* 24 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;

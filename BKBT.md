@@ -103,6 +103,14 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     `src/core2/code_B5040.c`, `src/core2/code_B5E00.c`, `src/core2/ch/bottlesbonuscursor.c`,
     `src/core2/gc/parade.c`, `src/core2/code_C4320.c` ("The save device", "The Archipelago settings",
     "Molehills as Archipelago locations" below).
+14. **Empty honeycombs as Archipelago items and locations** (2026-10-26; `docs/ROADMAP.md` of the BKBT
+    repository, hack features 3 and 4): picking up an empty honeycomb is a check (the game's own bit, which
+    it saves itself) and no longer counts; the game publishes those bits as 25 bytes behind the molehill
+    bytes of `bkbt_ap_locations`, and its honeycomb pieces and health total follow the total of
+    `bkbt_ap_items.honeycombs` the client writes, raised one piece at a time with the HUD (layout 0.5.0;
+    the anchor itself is unchanged). `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/ba/marker.c`,
+    `src/core2/code_BEF20.c`, `src/core2/code_B5E00.c`, `src/core2/code_956B0.c` ("Empty honeycombs as
+    Archipelago items and locations" below).
 
 ## The frame hook
 
@@ -485,32 +493,35 @@ the tools.
 With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the KSEG0 address of
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
 settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
-Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"). An
+Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
+same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, which grew the structs it points to). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:129-163`), big-endian like everything the client reads, version 0.4.0
-  since the molehills of 2026-10-22 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
-  day):
+- **The layout** (`include/bkbt.h:155-189`), big-endian like everything the client reads, version 0.5.0
+  since the honeycombs of 2026-10-26 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
+  day, 0.4.0 with the molehills of 2026-10-22):
 
   | Offset | Field | Value |
   |---|---|---|
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 in 0.4.0) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 4 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0) |
+  | `+0x0A` | `u8 version_minor` | 5 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
   | `+0x14` | `BkbtApLocations *locations` | `&bkbt_ap_locations`, which the game writes and the client reads (since 0.4.0; "Molehills as Archipelago locations") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
-  version before it trusts anything else, and reads nothing at or past `size`. Later features append
+  version before it trusts anything else, and reads nothing at or past `size`. The version also says the
+  layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
+  from 20 to 48, behind an unchanged anchor. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -710,8 +721,10 @@ console.
 
 With `BKBT=1` the game gives the player what an Archipelago client says was received: `bkbt_ap_items`,
 a 20-byte struct that the anchor points to from layout 0.3.0 on. This first version holds the moves
-only, one byte per move; the counted kinds (honeycombs, notes, tokens, jiggies, jinjos) and traps are to
-come (`docs/ROADMAP.md` of the BKBT repository, hack feature 3). The client writes totals, as the Tooie
+only, one byte per move; since layout 0.5.0 (2026-10-26) a byte behind them holds the empty honeycombs
+received, which have a section of their own ("Empty honeycombs as Archipelago items and locations");
+the other counted kinds (notes, tokens, jiggies, jinjos) and traps are to come (`docs/ROADMAP.md` of
+the BKBT repository, hack feature 3). The client writes totals, as the Tooie
 client writes counts of what was received (`docs/upstream-banjo-tooie.md` of the BKBT repository), and
 the game makes its learned moves the mirror of them: while the seed is committed and a file is played,
 on every main-loop iteration, a move sent is learned and a move not sent is unlearned. There is no
@@ -866,8 +879,9 @@ checks its location, and the move comes only as an item from the client ("The Ar
 game records the checks in `bkbt_ap_locations`, a 20-byte struct that the anchor points to from layout
 0.4.0 on, one byte per move, which the game writes and the client only reads. A molehill picks its
 first-visit text or its refresher by that byte, not by whether the move is known. This is the first part
-of hack feature 4 (`docs/ROADMAP.md` of the BKBT repository); the vanilla flags of jiggies, honeycombs
-and tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate of
+of hack feature 4 (`docs/ROADMAP.md` of the BKBT repository); the empty honeycombs followed on
+2026-10-26, as 25 bytes behind these 20 ("Empty honeycombs as Archipelago items and locations"), and
+jiggies, tokens, the note doors, Cheato and Brentilda are to come. There is no switch and no client gate of
 its own: every hack build, by itself and in the dual-boot image (until 2026-10-26 also with R + A
 without a client; since then no game starts without one); the matching build has none of it. Done on
 2026-10-22; one byte per move indexed like the items, the game as the only writer, and no gate are the
@@ -1025,6 +1039,95 @@ message, since no game starts without one. The seed check showed the locations o
 browsing publishing nothing ("The Archipelago settings"). Not shown: the three mid-session reloads (the
 harness cannot reach them).
 
+## Empty honeycombs as Archipelago items and locations
+
+With `BKBT=1` the 24 empty honeycombs are Archipelago locations and the empty honeycomb is an
+Archipelago item. Picking one up checks its location and no longer counts toward health; the game's
+pieces towards the next unit of health and its health total follow the total the client says was
+received. There is no switch: every hack build, by itself and in the dual-boot image; the matching build
+has none of it. Done on 2026-10-26 (`docs/ROADMAP.md` of the BKBT repository, hack features 3 and 4),
+built by Claude with the owner reviewing. The owner's decisions of that day: a received honeycomb shows
+with the game's own HUD and upgrade; the checks are bytes in the locations struct, not the game's own
+bits; the pause menu keeps counting the honeycombs picked up.
+
+- **How retail does it** (read from the decomp). One bit per honeycomb in `sHoneycombScore[3]`
+  (`src/core2/honeycombscore.c:12`; honeycomb n, `enum honeycomb_e` 1..`0x18`, is bit `n & 7` of byte
+  `(n - 1) / 8`), set only by the pickup (`src/core2/ba/marker.c:578`), saved in each game record at
+  `+0x0F..+0x11` (`src/core2/code_B5040.c:116-126`), and read by every honeycomb and by the switches and
+  characters that spawn the five that are not placed (`code_42CB0.c:105-112`, the GV and RBB switches,
+  Gobi, the SM Colliwobble and Quarries) and by the pause menu. The pieces (`ITEM_13_EMPTY_HONEYCOMB`)
+  and the health total (`ITEM_15_HEALTH_TOTAL`) are not saved: `func_8034789C`
+  (`src/core2/code_BEF20.c:530`) rebuilds them from the bits as `total % 6` and `5 + MIN(3, total / 6)`,
+  at every map load (`gc/section.c:286`) and every load of a save (`func_80347958`, which also fills the
+  health). The pickup adds a piece and, with the sixth, blocks the pause menu (`gcpausemenu_80314AC8(0)`);
+  the HUD (`fx/honeycarrierscore.c:179-255`) trades six pieces for a unit of health and lifts the block.
+- **The layout** (`include/bkbt.h:103-141`; layout 0.5.0, `BKBT_AP_VERSION_MINOR` 5): the items gained
+  `+0x14 u8 honeycombs`, the total received, read as at most `BKBT_AP_HONEYCOMB_MAX` (24), and 3 bytes of
+  named padding (24 bytes); the locations gained `+0x14 u8 honeycombs[BKBT_AP_HONEYCOMB_SLOTS]`,
+  `BKBT_AP_HONEYCOMB_SLOTS` `0x19`, indexed by `enum honeycomb_e` like the game's `HONEYCOMB_COUNT` (byte
+  `[0]` is never set), not 0 = picked up, and padding (48 bytes). A client writes the total only to a ROM
+  whose anchor says 0.5.0 or later: in a 0.4.0 ROM the byte after the moves is `bkbt_ap_locations.moves[0]`.
+- **Which state is the chosen game's: `bkbt_file_chosen`** (`src/core1/code_0.c:174`, declared in
+  `include/bkbt.h:149`). The score state holds the chosen game only between A on the file select and the
+  next `clearScoreStates`: hovering a file clears it and loads that file (`src/core2/ch/gameSelect.c:228-238`),
+  and demos and Bottles' Bonus clear it too. The flag is set in `bkbt_gameFile_loadAP`
+  (`src/core2/code_B5E00.c:142`), which runs at A and after the mid-session reloads, each time right
+  after the game's own load, and cleared in `clearScoreStates` (`src/core2/code_956B0.c:1504`). Only the
+  pickups change the bits in between.
+- **Locations.** Under `#if BKBT` the pickup (`marker.c:576-593`) no longer adds the piece nor blocks
+  the pause; it still sets the bit, plays the jingle, shows the first-time text, sparkles and despawns.
+  The bit is the check, so the spawn gates, the pause menu and the save need no change. `bkbt_apHoneycombs`
+  (`code_0.c:281`), called from `bkbt_frame` after the moves (`:428`), copies the 24 bits into the
+  locations on every main-loop iteration while `bkbt_file_chosen`; `clearScoreStates` zeroes the copy
+  with the molehill bytes. The game's record stays the only source, so a load, a reload and a pickup
+  cannot disagree with the copy, and a file the file select only shows is never published.
+- **Items.** `sBkbtApHoneycombsGiven` (`code_0.c:221`) is how many honeycombs the game's counts stand
+  for; RAM only, since the client sends its total again after every boot. Under `#if BKBT`
+  `func_8034789C` takes its total from `bkbt_apHoneycombsForHealth` (`code_0.c:270`; `code_BEF20.c:534-539`):
+  while the file is chosen and the seed committed, the received total, taken as given at once and
+  quietly, so a load never replays the HUD for honeycombs given before; while the file is not chosen,
+  retail's count of the bits, which keeps demos as they were recorded (`func_802E4A08()` cannot tell a
+  demo there: a demo rebuilds before its game mode is set, `demo.c:74`, `code_5C870.c:264-273`); while
+  the seed is not committed, what was given. `bkbt_apHoneycombs` gives one piece per iteration while the
+  total is higher, as the pickup did (`item_inc`, which shows the HUD, and with the sixth the pause
+  block), under the items' gate (`bkbt_apItemsAllowed`) and only while Banjo is in the map and placed
+  (`func_8028F070`) and not dying; it waits while 6 pieces wait for the HUD. A lower total than given is
+  applied quietly: the rebuild, then an adjustment of the pieces by 0, which clamps the health without a
+  HUD or the death latch an adjustment of the health could set. `bkbt_gameFile_loadAP` sets the flag and
+  calls `func_80347958`, so a game starts with the health of what was received, filled.
+- **For the tools.** `bkbt_ptr_ap_honeycombs_given` (`code_0.c:222`) exports the number given ("Exports
+  for tools" in "Rules for new code"): the counts read 0 pieces and a health total of 8 both for 18 and
+  for 24, so only the number shows that the last six arrived. The BKBT repository's honeycomb check
+  (`tools/bk_honeycomb_check.py`) reads it and, from the map, `D_80385F30` (the item counts),
+  `sHoneycombScore`, `D_80383084` (the pause block counter) and `D_803815C0` (the HUD's trade state),
+  all globals; the anchor check wants 0.5.0 and room for the two structs in the map; the stand-in client,
+  the seed check and the hand client write or read the honeycomb bytes from 0.5.0 on.
+- **What it costs.** 480 bytes of RAM headroom (lair ends at `0x80395350`, `lair_VRAM_END`) and 192 of
+  ROM room (23,536 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** A map load during the HUD's upgrade (1.5 s) can leave the health total one too high
+  (capped at 8) and the pause menu refused until the next map load: the upgrade's timed functions
+  survive a map load (`timedfuncqueue.c:280-299`) while the map load resets the block counter; retail has
+  the same race. A honeycomb picked up since the last save respawns after a reset, and its check is made
+  again (the server ignores it). The first-time text ("six give health") now means six received, and the
+  pause totals count the honeycombs picked up, not those received. Whether Bottles' Bonus and the ending
+  save before they reload is still open (the parade does: `func_8030AFD8(1)` in `gc/parade.c`).
+
+Checked on mupen64plus on 2026-10-26 with the BKBT repository's honeycomb check, the seed check and the
+anchor check (`hack/DUALBOOT.md` of the BKBT repository, "Checked"): the counts follow the client's total
+and not the planted bits (six honeycombs planted, total 0: health 5/5); totals of 13 and 200 (read as
+24); a total raised from 0 to 7 given one piece per iteration, the pause menu blocked while six wait,
+one trade by the HUD, health 6/6, the same after a map change (also on the pure interpreter, and from
+17 to 30, read as 24, with two trades); a total lowered from 13 to 4, quietly; pickups of the SM stump,
+waterfall and tree honeycombs and both of Mumbo's Mountain's, which set the bit and the byte and count
+nothing until the client's total rises; a pickup saved, reset and loaded again, published from A and not
+there to pick up again; and, in the seed check, files with honeycombs browsed and refused without
+publishing them. By hand: the owner tried the normal image on Project64 3.0.1 and ares v148 on
+2026-10-26 with the BKBT repository's hand client (`hack/DUALBOOT.md` there, "Status"): pickups that count
+nothing until the client sends them, the upgrade at six, the pause menu, a save and a load, a lower total,
+the SM Colliwobble's and Quarries' honeycombs and the attract demos. Not checked: the three honeycombs
+spawned by events outside Spiral Mountain, the ROM by itself by hand, a console, any client but the
+stand-ins.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1041,11 +1144,12 @@ harness cannot reach them).
   with the save device of 2026-10-14, and the same with the new-game intro of that day and the logo
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
   settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
-  locations of 2026-10-22 and 68,240 with the save in SRAM of 2026-10-26, which no longer links
-  libultra's EEPROM functions: the largest, lair, ends at `0x80395840` in the maps of 2026-10-14 and
-  2026-10-15, at `0x80395890` in that of 2026-10-17, at `0x80395960` in that of the settings, at
-  `0x80395AA0` in that of the items, at `0x80395B00` in that of the molehills and at `0x80395170` in that
-  of 2026-10-26, read as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
+  locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
+  libultra's EEPROM functions, and 67,760 with the honeycombs of that day: the largest, lair, ends at
+  `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
+  `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
+  the molehills, at `0x80395170` in that of the save in SRAM and at `0x80395350` in that of the
+  honeycombs, read as `lair_VRAM_END`). Every level overlay is loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
   `build/us.v10/banjo.us.v10.map`.
@@ -1059,10 +1163,13 @@ harness cannot reach them).
   address and are there one at a time. Today: `bkbt_ptr_pad` (`sBkbtPad`, the pad record that the chord
   is read from) in `src/core1/joy.c`, `bkbt_ptr_chord_seen` (`sBkbtChordSeen`, the chord counter) and,
   since 2026-10-18, `bkbt_ptr_ap_item_passes` (`sBkbtApItemPasses`, the count of iterations that applied
-  the Archipelago items, "The Archipelago items") in `src/core1/code_0.c`, `bkbt_ptr_ucode`
+  the Archipelago items, "The Archipelago items") and, since 2026-10-26, `bkbt_ptr_ap_honeycombs_given`
+  (`sBkbtApHoneycombsGiven`, the empty honeycombs the game's counts stand for, "Empty honeycombs as
+  Archipelago items and locations") in `src/core1/code_0.c`, `bkbt_ptr_ucode`
   (`sUcodeData`, the rspboot buffer) in `src/core1/ucode.c`. The statics they point to are
   uninitialised, so each lies in its file's `.bss`, and core1 clears its bss at every boot. The items
-  check takes `bkbt_ptr_ap_item_passes` from the map; `tools/bk_fork_info.py` does not export it. The
+  check takes `bkbt_ptr_ap_item_passes` from the map, the honeycomb check `bkbt_ptr_ap_honeycombs_given`;
+  `tools/bk_fork_info.py` exports neither. The
   game's own pad arrays (`sInputs`, `sInputsPrimary`) are not exported any more: the chord is not read
   from them, and a tool that wrote them would not reach it. The map being played
   and the game mode need no export: `sGsWorldData` (+4) and `sGameState` (+4) are globals. Neither does
@@ -1076,7 +1183,10 @@ harness cannot reach them).
   and locations checks read, and `g_Dialog`, which the locations check reads. Since 2026-10-26 two more
   globals of `src/core1/code_0.c`: `bkbt_file_seed`, which the seed check reads from the map (and goes
   without when a build lacks it), and `bkbt_playing_seed`, which no tool reads (the checks judge the seed
-  in the saved record); the seed check also reads `gameNumber`. The tools take the size of a game record
+  in the saved record); the seed check also reads `gameNumber`. Since the honeycombs of that day
+  `bkbt_file_chosen`, which no tool reads, and the game's own `sHoneycombScore`, `D_80385F30` (the item
+  counts), `D_80383084` (the pause block counter) and `D_803815C0` (the HUD's trade state), which the
+  honeycomb check reads (the seed check writes `sHoneycombScore` to stand in for a pickup). The tools take the size of a game record
   from the spacing of `gameFile_saveData[4]` and the `gameFile_GameIdToFileIdMap` behind it, in
   `bk-fork.json` or an image's info block, and refuse a size they do not know (`tools/bk_eeprom.py` of
   the BKBT repository). One static is used without an export: the locations check
@@ -1112,4 +1222,4 @@ harness cannot reach them).
     Archipelago anchor; 22,800 in that of 2026-10-18, with the Archipelago settings; 22,592 in that with
     the Archipelago items, later that day; 22,624 in that of 2026-10-22, with the molehills as
     locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
-    `0xFDA350`).
+    `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`).

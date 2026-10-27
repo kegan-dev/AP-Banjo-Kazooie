@@ -171,6 +171,7 @@ BkbtApSettings bkbt_ap_settings = {
 
 u32 bkbt_file_seed = 0;
 u32 bkbt_playing_seed = 0;
+bool bkbt_file_chosen = FALSE;
 
 /* TRUE once the client has written the settings since this boot: it writes the seed last, and a seed is
  * never 0 (include/bkbt.h). The only place that rule is written down. */
@@ -200,16 +201,36 @@ const BkbtApSettings *bkbt_apSettings(void) {
 BkbtApItems bkbt_ap_items = { { 0 } };
 
 /* The Archipelago locations (include/bkbt.h): written by the game (the molehills, src/core2/ch/mole.c and
- * src/SM/ch/smbottles.c), read by the client, all 0 at every boot. */
+ * src/SM/ch/smbottles.c; the honeycombs, bkbt_apHoneycombs below), read by the client, all 0 at every
+ * boot. */
 BkbtApLocations bkbt_ap_locations = { { 0 } };
 
 /* mainLoop iterations on which bkbt_frame copied the items from the client. For the
  * tools that test a ROM: a test that expects items not to be copied proves nothing unless the game is
- * shown to have applied items. The one static here that is not initialised: a tool reaches it through
+ * shown to have applied items. Not initialised, unlike the statics above: a tool reaches it through
  * the pointer below and checks that against this file's .bss (BKBT.md, "Exports for tools"). core1_main
  * clears it at every boot. */
 static u32 sBkbtApItemPasses;
 u32 *bkbt_ptr_ap_item_passes = &sBkbtApItemPasses;
+
+/* The empty honeycombs the game has given while the chosen game is in play: the number its own counts
+ * stand for, ITEM_13_EMPTY_HONEYCOMB (pieces towards the next unit of health, total mod 6) and
+ * ITEM_15_HEALTH_TOTAL. Not saved: the client sends its total again after every boot, and the counts
+ * are rebuilt from it at every load. Exported like sBkbtApItemPasses, because a tool cannot read it
+ * from the counts: they read 0 pieces and a health total of 8 both for 18 and for 24. */
+static s32 sBkbtApHoneycombsGiven;
+s32 *bkbt_ptr_ap_honeycombs_given = &sBkbtApHoneycombsGiven;
+
+/* core2 functions used below that no header declares. */
+bool honeycombscore_get(enum honeycomb_e indx);                /* src/core2/honeycombscore.c */
+s32 honeycombscore_get_total(void);                            /* src/core2/honeycombscore.c */
+void item_inc(enum item_e item);                               /* src/core2/code_BEF20.c: +1, with the HUD */
+s32 item_getCount(enum item_e item);                           /* src/core2/code_BEF20.c */
+void item_adjustByDiffWithoutHud(enum item_e item, s32 diff);  /* src/core2/code_BEF20.c */
+void func_8034789C(void);         /* src/core2/code_BEF20.c: rebuilds the honeycomb pieces and the health total */
+void gcpausemenu_80314AC8(int arg0); /* src/core2/gc/pauseMenu.c: 0 adds a block on the pause menu, 1 lifts one */
+bool func_8028F070(void);         /* src/core2/code_7060.c: Banjo is in the map and placed (player_draw draws him) */
+bool player_isDead(void);         /* src/core2/code_7060.c */
 
 static bool bkbt_apItemsAllowed(void) {
     enum map_e map;
@@ -239,6 +260,66 @@ static void bkbt_apApplyItems(void) {
     sBkbtApItemPasses++;
 }
 
+/* The number of empty honeycombs the game rebuilds its counts from (func_8034789C, src/core2/code_BEF20.c)
+ * at every map load and every load of a save. Retail counts the honeycombs picked up. While the chosen
+ * game is in play those are locations, and the counts follow the honeycombs received: all of them,
+ * quietly, so a load never replays the HUD for what was given before. The rest of the time (boot, the
+ * file select, demos, the moments between clearScoreStates and the reload of a game) it is retail's
+ * count, which is what a demo was recorded with. While the seed is not committed the client is changing
+ * its items, and what was given stays. */
+s32 bkbt_apHoneycombsForHealth(void) {
+    if (!bkbt_file_chosen) {
+        return honeycombscore_get_total();
+    }
+    if (bkbt_apSettingsCommitted()) {
+        sBkbtApHoneycombsGiven = MIN(bkbt_ap_items.honeycombs, BKBT_AP_HONEYCOMB_MAX);
+    }
+    return sBkbtApHoneycombsGiven;
+}
+
+/* The empty honeycombs (include/bkbt.h), on every mainLoop iteration while the chosen game is in play. */
+static void bkbt_apHoneycombs(void) {
+    s32 id;
+    s32 received;
+
+    if (!bkbt_file_chosen) {
+        return;
+    }
+
+    /* The locations: a copy of the game's own record of the honeycombs picked up. That record stays the
+     * one the honeycombs, the switches and characters that spawn them, the pause menu and the save read. */
+    for (id = 1; id < BKBT_AP_HONEYCOMB_SLOTS; id++) {
+        bkbt_ap_locations.honeycombs[id] = honeycombscore_get(id);
+    }
+
+    /* The items: one honeycomb per iteration, given the way a pickup gives it in retail
+     * (src/core2/ba/marker.c), so the HUD shows it and trades six in for a unit of health. Only while
+     * Banjo is about, as for a pickup: not in a cutscene map, where nothing would show, nor while he dies,
+     * when the upgrade's refill would come too late. */
+    if (!bkbt_apItemsAllowed() || !func_8028F070() || player_isDead()) {
+        return;
+    }
+    /* Six pieces wait for the HUD to trade them in (src/core2/fx/honeycarrierscore.c), which also lifts
+     * the pause block set with the sixth. Nothing changes until it has. */
+    if (item_getCount(ITEM_13_EMPTY_HONEYCOMB) >= 6) {
+        return;
+    }
+    received = MIN(bkbt_ap_items.honeycombs, BKBT_AP_HONEYCOMB_MAX);
+    if (received > sBkbtApHoneycombsGiven) {
+        sBkbtApHoneycombsGiven++;
+        item_inc(ITEM_13_EMPTY_HONEYCOMB);
+        if (item_getCount(ITEM_13_EMPTY_HONEYCOMB) >= 6) {
+            gcpausemenu_80314AC8(0); /* as the pickup did: no pause menu until the HUD's upgrade is done */
+        }
+    } else if (received < sBkbtApHoneycombsGiven) {
+        /* Fewer than given (a client's mistake, or a test): rebuild the counts from the received total,
+         * quietly. The rebuild takes it as given (bkbt_apHoneycombsForHealth; the seed is committed here),
+         * and an adjustment by 0 clamps the health to the lower total without a HUD. */
+        func_8034789C();
+        item_adjustByDiffWithoutHud(ITEM_13_EMPTY_HONEYCOMB, 0);
+    }
+}
+
 /* The Archipelago anchor (include/bkbt.h). Initialised data, so it is right from the first instruction:
  * bkbt_init only has to publish its address. A global, so that the map carries it for the tools. */
 BkbtApAnchor bkbt_ap_anchor = {
@@ -256,7 +337,7 @@ BkbtApAnchor bkbt_ap_anchor = {
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
  * tools that test a ROM: a test that expects the chord to do nothing proves nothing unless the game is
- * shown to have seen the chord. The one static here that is not initialised: a tool reaches it through
+ * shown to have seen the chord. Not initialised, like the two counters above: a tool reaches it through
  * the pointer below and checks that against this file's .bss (BKBT.md, "Exports for tools"). core1_main
  * clears it at every boot. */
 static u32 sBkbtChordSeen;
@@ -344,6 +425,7 @@ void bkbt_frame(void) {
 
     /* Sync the moves with the AP client every frame */
     bkbt_apApplyItems();
+    bkbt_apHoneycombs();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the

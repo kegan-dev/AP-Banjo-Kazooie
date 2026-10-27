@@ -1500,6 +1500,11 @@ void clearScoreStates(void) {
     for (i = 0; i < BKBT_AP_MOVE_COUNT; i++) {
         bkbt_ap_locations.moves[i] = 0;
     }
+    /* The honeycombs just cleared above belong to no chosen game until bkbt_gameFile_loadAP. */
+    bkbt_file_chosen = FALSE;
+    for (i = 0; i < BKBT_AP_HONEYCOMB_SLOTS; i++) {
+        bkbt_ap_locations.honeycombs[i] = 0;
+    }
 #endif
 }
 

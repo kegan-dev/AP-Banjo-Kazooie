@@ -126,12 +126,21 @@ void gameFile_load(s32 gamenum){
     saveData_load(&gameFile_saveData[filenum]);
 }
 #if BKBT
+void func_80347958(void); /* src/core2/code_BEF20.c: rebuilds the honeycomb pieces and the health total, then fills the health */
+
 /* Load AP specific items from the save file into memory. Should only be called
  * after the file is selected by the user. Otherwise the client will commit
  * location checks for files being hovered. See gameselect.c */
 void bkbt_gameFile_loadAP(s32 gamenum) {
     s32 filenum = gameFile_GameIdToFileIdMap[gamenum];
     bkbt_saveData_loadAP(&gameFile_saveData[filenum]);
+
+    /* The score state is this game's from here on (gameFile_load has run, whether while browsing or for
+     * a reload): the honeycombs picked up may be published, and the counts follow the honeycombs
+     * received. Rebuilt now, with the health filled as a load fills it, so that the game starts with
+     * the health of what was received rather than of what was picked up. */
+    bkbt_file_chosen = TRUE;
+    func_80347958();
 }
 #endif
 

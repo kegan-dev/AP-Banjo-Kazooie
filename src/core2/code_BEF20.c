@@ -4,6 +4,9 @@
 #include "variables.h"
 
 #include "time.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 void itemscore_noteScores_update(s32);
 
@@ -528,7 +531,12 @@ void func_8034789C(void) {
     s32 sp1C;
     s32 temp_v0;
 
+#if BKBT
+    /* While the chosen game is in play, the honeycombs received, not those picked up (src/core1/code_0.c). */
+    sp1C = bkbt_apHoneycombsForHealth();
+#else
     sp1C = honeycombscore_get_total();
+#endif
     D_80385F30[ITEM_13_EMPTY_HONEYCOMB] = sp1C % 6;
     if (fileProgressFlag_get(FILEPROG_B9_DOUBLE_HEALTH)) {
         D_80385F30[ITEM_15_HEALTH_TOTAL] = 16;
