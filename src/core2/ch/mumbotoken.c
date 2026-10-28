@@ -31,7 +31,13 @@ void chMumboToken_collect(ActorMarker *marker, ActorMarker *other_marker){
     func_8030E760(0x401, 1.0f, 0x7fff);
     timedFunc_set_1(0.75f, progressDialog_showDialogMaskZero, FILEPROG_4_MUMBO_TOKEN_TEXT);
     fxSparkle_mumboToken(&marker->propPtr->position_x);
+#if BKBT
+    /* A Mumbo token picked up is an Archipelago location: its bit above is the check (bkbt_apTokens copies
+     * it for the client). It is not added to the held count, and so no counter shows: the client's token
+     * arrives in the held count with the counter (bkbt_apTokens, src/core1/code_0.c). */
+#else
     item_inc(ITEM_1C_MUMBO_TOKEN);
+#endif
     marker_despawn(marker);
     
 }

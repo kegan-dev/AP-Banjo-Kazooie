@@ -121,6 +121,16 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     screen. `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`, `src/core2/ba/marker.c`,
     `src/core2/code_B5040.c`, `src/core2/code_BEF20.c`, `src/core2/code_956B0.c` ("Jiggies as Archipelago
     items and locations" below).
+16. **Mumbo tokens as Archipelago items and locations** (2026-10-27; `docs/ROADMAP.md` of the BKBT
+    repository, hack features 3 and 4): picking up a token is a check (the game's own bit, which it saves
+    itself) and no longer adds to the tokens held, so no counter shows at the pickup; the game publishes
+    those bits as 116 bytes behind the jiggy bytes of `bkbt_ap_locations`, and gives the tokens of
+    `bkbt_ap_items.tokens` the client writes that are above the tokens it has given, a count it saves in
+    the game record beside the tokens held, with the token counter (layout 0.7.0; the anchor itself is
+    unchanged). Mumbo charges the tokens held as in retail. The give-and-take-back is one function for the
+    jiggies and the tokens (`bkbt_apGiveHeld`). `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`,
+    `src/core2/ch/mumbotoken.c`, `src/core2/code_B5040.c`, `src/core2/code_956B0.c` ("Mumbo tokens as
+    Archipelago items and locations" below).
 
 ## The frame hook
 
@@ -296,8 +306,9 @@ repository, "The save device".
 
 - **The layout** (`include/save.h:7-24`). The four game records (`SaveData`) one behind the other, then
   the global record (`GlobalData`, `0x20` bytes). A game record is retail's `+0x00..+0x73` (magic,
-  `slotIndex`, the game's data, `padding[2]`, whose first byte the hack build uses since 2026-10-27 for
-  the jiggies given, "Jiggies as Archipelago items and locations"), then under `#if BKBT` `u32 seed` at `+0x74` and
+  `slotIndex`, the game's data, `padding[2]`, which the hack build uses since 2026-10-27 for the jiggies
+  given and the Mumbo tokens given, "Jiggies as Archipelago items and locations", "Mumbo tokens as
+  Archipelago items and locations"), then under `#if BKBT` `u32 seed` at `+0x74` and
   `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
   Archipelago locations"), then the checksum at `+0x8C`: `0x90` bytes, retail `0x78`. In the SRAM: the
   records at `0x7000`, `0x7090`, `0x7120`, `0x71B0`, the global record at `0x7240`, this game's part
@@ -505,17 +516,18 @@ With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the K
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
 settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
-same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, and 0.6.0, the jiggies of 2026-10-27,
-which grew the structs it points to). An
+same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, and
+0.7.0, the Mumbo tokens of the same day, which grew the structs it points to). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:170-204`), big-endian like everything the client reads, version 0.6.0
-  since the jiggies of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of that
-  day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26):
+- **The layout** (`include/bkbt.h:180-214`), big-endian like everything the client reads, version 0.7.0
+  since the Mumbo tokens of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+  that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
+  jiggies of 2026-10-27):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -524,7 +536,7 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x05` | `u8 padding` | 0 |
   | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 6 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0) |
+  | `+0x0A` | `u8 version_minor` | 7 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -533,8 +545,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
   layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
-  from 20 to 48, and in 0.6.0 the locations to 152 (the items took a byte of their padding), behind an
-  unchanged anchor. Later features append
+  from 20 to 48, in 0.6.0 the locations to 152 and in 0.7.0 to 268 (the items took a byte of their
+  padding each time), behind an unchanged anchor. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -737,8 +749,9 @@ a 20-byte struct that the anchor points to from layout 0.3.0 on. This first vers
 only, one byte per move; since layout 0.5.0 (2026-10-26) a byte behind them holds the empty honeycombs
 received, which have a section of their own ("Empty honeycombs as Archipelago items and locations"), and
 since layout 0.6.0 (2026-10-27) the next byte holds the jiggies received ("Jiggies as Archipelago items and
-locations"); the other counted kinds (notes, tokens, jinjos) and traps are to come (`docs/ROADMAP.md` of
-the BKBT repository, hack feature 3). The client writes totals, as the Tooie
+locations"), and since layout 0.7.0 (the same day) the next the Mumbo tokens received ("Mumbo tokens as
+Archipelago items and locations"); the other counted kinds (notes, jinjos) and traps are to come
+(`docs/ROADMAP.md` of the BKBT repository, hack feature 3). The client writes totals, as the Tooie
 client writes counts of what was received (`docs/upstream-banjo-tooie.md` of the BKBT repository), and
 the game makes its learned moves the mirror of them: while the seed is committed and a file is played,
 on every main-loop iteration, a move sent is learned and a move not sent is unlearned. There is no
@@ -1227,6 +1240,72 @@ the dual-boot image, a jiggy spawned by an event, Treasure Trove Cove's podium a
 (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not checked: a console, any client but the
 stand-ins, the ROM by itself by hand.
 
+## Mumbo tokens as Archipelago items and locations
+
+With `BKBT=1` the 115 Mumbo tokens are Archipelago locations and the token is an Archipelago item.
+Picking one up checks its location and no longer adds to the tokens held; the game gives the tokens the
+client says were received, with the token counter, and Mumbo charges them as in retail. There is no
+switch: every hack build, by itself and in the dual-boot image; the matching build has none of it. Done
+on 2026-10-27 (`docs/ROADMAP.md` of the BKBT repository, hack features 3 and 4), built by Claude with the
+owner reviewing, the same way as the jiggies. The owner's decisions of that day: Mumbo's prices stay
+retail's for now; a pickup shows no counter, which shows only when the client sends a token (as the
+owner chose for the jiggies after their first hand test).
+
+- **How retail does it** (read from the decomp; `docs/bk-decomp-notes.md` of the BKBT repository,
+  "Mumbo tokens"). One bit per token in `sMumboTokenScore` (`src/core2/mumboscore.c:5-11`, 16 bytes;
+  token n, `enum mumbotoken_e` 1..`0x73` in `include/enums.h`, is bit `n & 7` of byte `(n - 1) / 8`), set
+  only by the pickup (`src/core2/ch/mumbotoken.c:30`) and saved in each game record at `+0x12..+0x21`;
+  every token despawns at init when its bit is set (`:77-83`). A token's id comes from the flag node
+  nearest to where it spawns, the node's value less 199 (`:45-60`), placed or dropped by an enemy alike.
+  Two counts: `ITEM_1C_MUMBO_TOKEN`, the tokens held, which the pickup raises by 1 with its counter
+  (`item_inc`, `:39`, retail's line under `#else` in the fork), Mumbo charges (`src/core2/ch/mumbo.c:165`, `:178`, `:353`: termite 5, croc 10,
+  walrus 15, pumpkin 20, bee 25, `:77-91`, once per transformation, after which `FILEPROG_90..94` say it
+  is paid for, `:395`) and the game **saves** (saved items byte 0, record `+0x65`,
+  `src/core2/code_BEF20.c:501`, restored at `:580`); and `ITEM_25_MUMBO_TOKEN_TOTAL`, a copy of it for the
+  pause menu, which every `item_adjustByDiff` call sets to it (`code_BEF20.c:96`). Mumbo keeps the token
+  counter on the screen while he is awake (`mumbo.c:222-227`). The sandcastle's banned cheat sets the
+  tokens held to 99 (`src/TTC/ma/castle.c:1019`) and the attract demo to 25 (`src/core2/code_C4320.c:209`).
+- **The layout** (`include/bkbt.h:103-178`; layout 0.7.0, `BKBT_AP_VERSION_MINOR` 7): the items keep 24
+  bytes, `+0x16 u8 tokens` taken from their padding (the total received, read as at most
+  `BKBT_AP_TOKEN_MAX`, 115), one byte of padding left at `+0x17`; the locations append `+0x98 u8
+  tokens[BKBT_AP_TOKEN_SLOTS]` (`0x74`, indexed by `enum mumbotoken_e`, `[0]` never set, not 0 = picked
+  up) behind the jiggies' padding: 268 bytes. A client writes the total only to a ROM whose anchor says
+  0.7.0 or later: in a 0.6.0 ROM `+0x16` is padding.
+- **The tokens given, saved**, for the jiggies' reason: the tokens held are saved and spent.
+  `bkbt_tokens_given` (`src/core1/code_0.c`, declared in `include/bkbt.h`) is saved in the record's last
+  padding byte, `+0x73` (`SaveData.tokens_given`, `include/save.h`), by `saveData_create` in the same call
+  that saves the tokens held, read back by `bkbt_saveData_loadAP`, zeroed by `clearScoreStates`. The
+  record has no padding left: the next count of this kind needs a bigger record, which the tools would
+  have to learn (`tools/bk_eeprom.py` of the BKBT repository knows `0x90` and `0x78` only).
+- **Locations.** Under `#if BKBT` the pickup (`src/core2/ch/mumbotoken.c`, `chMumboToken_collect`) no
+  longer raises the tokens held, so no counter shows there; the bit, the sound, the first token's text
+  and the sparkle stay. `bkbt_apTokens` (`code_0.c`), called from `bkbt_frame` after the jiggies, copies
+  the 115 bits into the locations on every main-loop iteration while `bkbt_file_chosen`.
+- **Items.** `bkbt_apTokens` then, under the items' gate and while Banjo is in the map, placed and not
+  dying, calls `bkbt_apGiveHeld` (`code_0.c`), the jiggies' rule made one function for both: a total above
+  the tokens given goes into `ITEM_1C` in one `item_adjustByDiff` call with the counter, after the
+  counter's shown number is set to the tokens held when it is not on the screen; a total below takes back
+  quietly what it can from the tokens held, never what Mumbo took, and lowers the tokens given only by
+  that. Near Mumbo, whose own call keeps the counter up, the counter counts up as it is.
+- **For the tools.** `bkbt_tokens_given` is a global. The BKBT repository's token check
+  (`tools/bk_token_check.py`) reads it and, from the map, `D_80385F30`, `sMumboTokenScore`,
+  `gFileProgressFlags` (+8, Mumbo's paid flags), `itemPrintValues` and `D_803692F8` (the token counter's
+  state); the anchor check wants 0.7.0 and room for the 268 bytes in the map; the stand-in client, the
+  seed check and the hand client write or read the token bytes from 0.7.0 on.
+- **What it costs.** 416 bytes of RAM headroom (lair ends at `0x80395730`, `lair_VRAM_END`) and 272 of ROM
+  room (23,104 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** A save of a build before the tokens holds the tokens picked up and counted and none
+  given, so the client's total lands on top of them. A total lowered below what was spent leaves the
+  tokens held at 0 and the rest given. A token picked up and a total given since the last save are picked
+  up and given again after a reset. The pause totals count the tokens picked up.
+
+Checked on mupen64plus on 2026-10-27 with the BKBT repository's token check, the seed check and the
+anchor check (`hack/DUALBOOT.md` of the BKBT repository, "Checked"): see there for the list. The owner
+tried it by hand the same day on Project64 3.0.1 and ares v148 with the BKBT repository's hand client, in
+the dual-boot image (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not checked: a console, any
+client but the stand-ins, the tokens dropped by enemies, a transformation other than the termite, the
+ROM by itself by hand.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1244,12 +1323,13 @@ stand-ins, the ROM by itself by hand.
   skip of 2026-10-15, 66,416 with the Archipelago anchor of 2026-10-17, 66,208 with the Archipelago
   settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
-  libultra's EEPROM functions, 67,760 with the honeycombs of that day, and 67,184 with the jiggies of
-  2026-10-27: the largest, lair, ends at
+  libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
+  2026-10-27 and 66,768 with the Mumbo tokens of that day: the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
   the molehills, at `0x80395170` in that of the save in SRAM, at `0x80395350` in that of the
-  honeycombs and at `0x80395590` in that of the jiggies, read as `lair_VRAM_END`). Every level overlay is
+  honeycombs, at `0x80395590` in that of the jiggies and at `0x80395730` in that of the tokens, read as
+  `lair_VRAM_END`). Every level overlay is
   loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
@@ -1290,7 +1370,9 @@ stand-ins, the ROM by itself by hand.
   honeycomb check reads (the seed check writes `sHoneycombScore` to stand in for a pickup). Since the
   jiggies of 2026-10-27 `bkbt_jiggies_given` and the game's own `jiggyscore`, `gFileProgressFlags` and
   `itemPrintValues`, which the jiggy check reads (the seed check writes `jiggyscore` to stand in for a
-  pickup). The tools take the size of a game record
+  pickup). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
+  and `D_803692F8` (the counters on the screen), which the token check reads (the seed check writes
+  `sMumboTokenScore` to stand in for a pickup). The tools take the size of a game record
   from the spacing of `gameFile_saveData[4]` and the `gameFile_GameIdToFileIdMap` behind it, in
   `bk-fork.json` or an image's info block, and refuse a size they do not know (`tools/bk_eeprom.py` of
   the BKBT repository). One static is used without an export: the locations check
@@ -1327,4 +1409,5 @@ stand-ins, the ROM by itself by hand.
     the Archipelago items, later that day; 22,624 in that of 2026-10-22, with the molehills as
     locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
     `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`; 23,376 in that
-    with the jiggies of 2026-10-27, fill from `0xFDA4B0`).
+    with the jiggies of 2026-10-27, fill from `0xFDA4B0`; 23,104 in that with the Mumbo tokens of that
+    day, fill from `0xFDA5C0`).

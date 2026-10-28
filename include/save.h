@@ -9,10 +9,11 @@ typedef struct{
     u8 slotIndex;
     u8 data[0x70];
 #if BKBT
-    /* Retail's padding, never written by retail: the jiggies received that this game had given when it
-     * was saved (bkbt_jiggies_given), saved in the same record as the held count it went into */
+    /* Retail's padding, never written by retail: the jiggies and the Mumbo tokens received that this game
+     * had given when it was saved (bkbt_jiggies_given, bkbt_tokens_given), each saved in the same record
+     * as the held count it went into. The last of the padding: another such count needs a bigger record */
     u8 jiggies_given;
-    u8 padding;
+    u8 tokens_given;
 #else
     u8 padding[0x2];
 #endif
