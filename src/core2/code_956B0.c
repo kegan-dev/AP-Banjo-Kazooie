@@ -1515,6 +1515,10 @@ void clearScoreStates(void) {
         bkbt_ap_locations.tokens[i] = 0;
     }
     bkbt_tokens_given = 0;
+    /* The note scores went with item_setItemsStartCounts above. */
+    for (i = 0; i < BKBT_AP_NOTE_DOOR_SLOTS; i++) {
+        bkbt_ap_locations.note_doors[i] = 0;
+    }
 #endif
 }
 

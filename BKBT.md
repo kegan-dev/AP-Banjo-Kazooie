@@ -131,6 +131,14 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     jiggies and the tokens (`bkbt_apGiveHeld`). `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`,
     `src/core2/ch/mumbotoken.c`, `src/core2/code_B5040.c`, `src/core2/code_956B0.c` ("Mumbo tokens as
     Archipelago items and locations" below).
+17. **Note doors as Archipelago items and locations** (2026-10-27; `docs/ROADMAP.md` of the BKBT
+    repository, hack features 3 and 4): a note door opens on its item, `bkbt_ap_items.note_doors[]`, when
+    Banjo comes near it, with retail's fade, flag and jig, and no longer at a note total; Grunty's "not
+    enough notes" line is gone. The note total (the worlds' best note counts, which the game saves)
+    reaching a door's cost is a location, published in `bkbt_ap_locations.note_doors[]` (layout 0.8.0: the
+    items grew to 40 bytes, the locations to 284; the anchor itself is unchanged). No save change.
+    `include/bkbt.h`, `src/core1/code_0.c`, `src/lair/lairspawnqueue.c`, `src/core2/code_956B0.c` ("Note
+    doors as Archipelago items and locations" below).
 
 ## The frame hook
 
@@ -516,18 +524,19 @@ With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the K
 `bkbt_ap_anchor`, a struct that says which game runs and which layout it has (12 bytes, 16 since the
 settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
-same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, and
-0.7.0, the Mumbo tokens of the same day, which grew the structs it points to). An
+same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, 0.7.0,
+the Mumbo tokens of the same day, and 0.8.0, the note doors of that day, which grew the structs it points
+to). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:180-214`), big-endian like everything the client reads, version 0.7.0
-  since the Mumbo tokens of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+- **The layout** (`include/bkbt.h:206-240`), big-endian like everything the client reads, version 0.8.0
+  since the note doors of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
-  jiggies of 2026-10-27):
+  jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -536,7 +545,7 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x05` | `u8 padding` | 0 |
   | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 7 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0) |
+  | `+0x0A` | `u8 version_minor` | 8 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -546,7 +555,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
   layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
   from 20 to 48, in 0.6.0 the locations to 152 and in 0.7.0 to 268 (the items took a byte of their
-  padding each time), behind an unchanged anchor. Later features append
+  padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor.
+  Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -750,7 +760,9 @@ only, one byte per move; since layout 0.5.0 (2026-10-26) a byte behind them hold
 received, which have a section of their own ("Empty honeycombs as Archipelago items and locations"), and
 since layout 0.6.0 (2026-10-27) the next byte holds the jiggies received ("Jiggies as Archipelago items and
 locations"), and since layout 0.7.0 (the same day) the next the Mumbo tokens received ("Mumbo tokens as
-Archipelago items and locations"); the other counted kinds (notes, jinjos) and traps are to come
+Archipelago items and locations"), and since layout 0.8.0 (that day too) 13 bytes from `+0x18` the note
+doors received ("Note doors as Archipelago items and locations"); the other counted kinds (notes,
+jinjos) and traps are to come
 (`docs/ROADMAP.md` of the BKBT repository, hack feature 3). The client writes totals, as the Tooie
 client writes counts of what was received (`docs/upstream-banjo-tooie.md` of the BKBT repository), and
 the game makes its learned moves the mirror of them: while the seed is committed and a file is played,
@@ -1306,6 +1318,69 @@ the dual-boot image (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not c
 client but the stand-ins, the tokens dropped by enemies, a transformation other than the termite, the
 ROM by itself by hand.
 
+## Note doors as Archipelago items and locations
+
+With `BKBT=1` each of the Lair's 12 note doors is an Archipelago item and the note total reaching each
+door's cost is an Archipelago location. A door opens when Banjo comes near it once the client has sent
+it, whatever the notes; the threshold is checked as soon as the total reaches the cost, wherever Banjo
+is. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
+none of it. Done on 2026-10-27 (`docs/ROADMAP.md` of the BKBT repository, hack features 3 and 4), built
+by Claude with the owner reviewing. The owner's decisions of that day: one item per door; the door
+opens when Banjo comes near, with retail's fade and jig; Grunty's "not enough notes" line is dropped;
+the costs stay retail's for now.
+
+- **How retail does it** (read from the decomp; `docs/bk-decomp-notes.md` of the BKBT repository, "Notes
+  and note doors"). The notes picked up in a visit, `ITEM_C_NOTE`, reset when the level changes
+  (`src/core2/code_BEF20.c:219`); the best count of each world, `sItemscoreNoteScores` (`:21`), rises as
+  notes are picked up (`:150-157`, `:400-425`) and is saved (record `+0x22`, a u64 of nine 7-bit counts).
+  The doors read the sum of the best counts, `itemscore_noteScores_getTotal` (`:427-434`). The door actor
+  (`src/lair/lairspawnqueue.c`, update `func_80387730`, `:933-1036`): its selector 1..12 picks its cost
+  from `note_door_cost_data` (`:481`: 50, 180, 260, 350, 450, 640, 765, 810, 828, 846, 864, 882) and its
+  flag, `FILEPROG_39 + selector`; at init it despawns when the flag is set (`:952-955`; doors 2..7 also
+  on the sandcastle's cheats, `:956-959`); every frame, with ability `0x13` (`:971`), it shows the note
+  counter within 500 units and, when the total has reached the cost and Banjo is within 140 units of
+  the middle of its model (290 of its origin before it is drawn), fades out, sets its flag, despawns and
+  sets off the jig (`:976-1004`); with too few notes door 2 and later make Grunty speak within 290 units
+  (`:1029-1031`). Nothing marks a threshold reached; nothing else reads the door flags.
+- **The layout** (`include/bkbt.h:103-204`; layout 0.8.0, `BKBT_AP_VERSION_MINOR` 8): the items grow to 40
+  bytes, `+0x18 u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]` (13, indexed by the door's selector, `[0]` never
+  set, not 0 = received) behind the padding byte `+0x17`, then 3 bytes of padding; the locations append
+  `+0x10C u8 note_doors[13]` (the same index, not 0 = the door's threshold reached), then 3 bytes of
+  padding: 284 bytes. Both stay multiples of 4. A client writes the doors only to a ROM whose anchor says
+  0.8.0 or later: in a 0.7.0 ROM `+0x18` is past the items, in the locations.
+- **Locations.** `bkbt_apNoteDoors` (`src/core1/code_0.c`), called from `bkbt_frame` after the tokens,
+  sets door d's byte to `itemscore_noteScores_getTotal() >= bkbt_note_door_costs[d - 1]` on every
+  main-loop iteration while `bkbt_file_chosen`, so never from a file the file select only shows.
+  `bkbt_note_door_costs` is retail's table copied into core1: `note_door_cost_data` is in the Lair's
+  overlay, in RAM only while Banjo is in the Lair. In the hack build only the thresholds read costs. No
+  save change: the best counts are saved, so the thresholds come back with the file; `clearScoreStates`
+  zeroes the bytes.
+- **Items.** `bkbt_apNoteDoorReceived(door)` (`code_0.c`) is the items' gate and the door's byte. In the
+  door actor two `#if BKBT` blocks: the open condition is `bkbt_apNoteDoorReceived(selector)` instead of
+  the total against the cost (retail's line under `#else`), and the else branch no longer sets off
+  Grunty's line. Coming near, the fade, the flag, the despawn and the jig stay retail's, and so do ability
+  `0x13`'s gate (the client always sends it) and the note counter near a door. A door the client has
+  sent while Banjo is elsewhere opens when he next comes near it.
+- **For the tools.** The BKBT repository's note-door check (`tools/bk_notedoor_check.py`) reads the
+  locations through the anchor, `sItemscoreNoteScores`, `gFileProgressFlags` (+8) and `D_803692F8` from
+  the map and requires `bkbt_note_door_costs`; the anchor check wants 0.8.0 with room for 40 and 284
+  bytes; the stand-in client and the hand client write the doors from 0.8.0 on, and the hand client plays
+  a server whose door n is at threshold n; the seed check plants the worlds' best counts.
+- **What it costs.** 304 bytes of RAM headroom (lair ends at `0x80395860`, `lair_VRAM_END`: the door's
+  code grew) and 256 of ROM room (22,848 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** The sandcastle's cheats still open doors 2..7 without their items. Doors 9..12 guard
+  nothing (they stand by the Dingpot; BK_Randomizer deletes them), but are in the contract like the rest.
+  A threshold reached since the last save is reached again after a reset, as the best counts are saved
+  only then. The door signs show retail's costs, which are the thresholds while the costs stay retail's.
+  A map change during a door's fade loses the open, as in retail; the door fades again at the next
+  approach.
+
+Checked on mupen64plus on 2026-10-27 with the BKBT repository's note-door check, the seed check and the
+anchor check (`hack/DUALBOOT.md` of the BKBT repository, "Checked"): see there for the list. The owner
+tried it by hand on 2026-10-28 on Project64 3.0.1 and ares v148 with the BKBT repository's hand client, in
+the dual-boot image, doors 1 and 2 (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not checked: a
+console, any client but the stand-ins, doors 3 to 12, the ROM by itself by hand.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1324,12 +1399,13 @@ ROM by itself by hand.
   settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
-  2026-10-27 and 66,768 with the Mumbo tokens of that day: the largest, lair, ends at
+  2026-10-27, 66,768 with the Mumbo tokens of that day and 66,464 with the note doors of that day: the
+  largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
   the molehills, at `0x80395170` in that of the save in SRAM, at `0x80395350` in that of the
-  honeycombs, at `0x80395590` in that of the jiggies and at `0x80395730` in that of the tokens, read as
-  `lair_VRAM_END`). Every level overlay is
+  honeycombs, at `0x80395590` in that of the jiggies, at `0x80395730` in that of the tokens and at
+  `0x80395860` in that of the note doors, read as `lair_VRAM_END`). Every level overlay is
   loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from
@@ -1372,7 +1448,11 @@ ROM by itself by hand.
   `itemPrintValues`, which the jiggy check reads (the seed check writes `jiggyscore` to stand in for a
   pickup). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
   and `D_803692F8` (the counters on the screen), which the token check reads (the seed check writes
-  `sMumboTokenScore` to stand in for a pickup). The tools take the size of a game record
+  `sMumboTokenScore` to stand in for a pickup). Since the note doors of that day `bkbt_note_door_costs`,
+  which the note-door check requires as the mark of a build with the note doors, and the game's own
+  `sItemscoreNoteScores` (the worlds' best note counts), which it and the hand client read with
+  `gFileProgressFlags` (+8, the doors' open flags) and `D_803692F8` (the note counter's state). The tools
+  take the size of a game record
   from the spacing of `gameFile_saveData[4]` and the `gameFile_GameIdToFileIdMap` behind it, in
   `bk-fork.json` or an image's info block, and refuse a size they do not know (`tools/bk_eeprom.py` of
   the BKBT repository). One static is used without an export: the locations check
@@ -1410,4 +1490,4 @@ ROM by itself by hand.
     locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
     `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`; 23,376 in that
     with the jiggies of 2026-10-27, fill from `0xFDA4B0`; 23,104 in that with the Mumbo tokens of that
-    day, fill from `0xFDA5C0`).
+    day, fill from `0xFDA5C0`; 22,848 in that with the note doors of that day, fill from `0xFDA6C0`).

@@ -5,6 +5,9 @@
 #include "actor.h"
 
 #include "core2/dustemitter.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void func_8028F918(s32);
 extern void func_802D2FB0(Actor *, s32, s32, s32, f32, s32, s32, s32);
@@ -973,7 +976,14 @@ void func_80387730(Actor *this) {
         if ((ml_vec3f_distance(spAC, this->position) < 500.0f) && (gcdialog_getCurrentTextId() != 0xF64)) {
             code_73640_printItemCount(ITEM_C_NOTE);
         }
+#if BKBT
+        /* A note door is an Archipelago item (include/bkbt.h): it opens once the client has sent it, not at
+         * a note total. The total reaching the door's cost is a location instead (bkbt_apNoteDoors,
+         * src/core1/code_0.c). Coming near, the fade, the flag and the jig below are retail's. */
+        if (bkbt_apNoteDoorReceived(this->actorTypeSpecificField)) {
+#else
         if (itemscore_noteScores_getTotal() >= note_door_cost_data[this->actorTypeSpecificField - 1]) {
+#endif
             if (this->marker->unk14_21) {
                 func_8032BC60(this, 5, sp90);
                 func_8032BC60(this, 6, sp84);
@@ -1028,7 +1038,12 @@ void func_80387730(Actor *this) {
                 }
             }
         } else if ((this->actorTypeSpecificField >= 2) && (ml_vec3f_distance(spAC, this->position) < 290.0f)) {
+#if BKBT
+            /* No "not enough notes" from Grunty: a door still shut waits for its item, not for notes (the
+             * owner's decision of 2026-10-27). The note counter above still shows near the door. */
+#else
             progressDialog_setAndTriggerDialog_0(VOLATILE_FLAG_B0_NOT_ENOUGH_NOTES);
+#endif
         }
     }
 }

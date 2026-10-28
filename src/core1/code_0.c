@@ -201,8 +201,9 @@ const BkbtApSettings *bkbt_apSettings(void) {
 BkbtApItems bkbt_ap_items = { { 0 } };
 
 /* The Archipelago locations (include/bkbt.h): written by the game (the molehills, src/core2/ch/mole.c and
- * src/SM/ch/smbottles.c; the honeycombs, the jiggies and the Mumbo tokens, bkbt_apHoneycombs,
- * bkbt_apJiggies and bkbt_apTokens below), read by the client, all 0 at every boot. */
+ * src/SM/ch/smbottles.c; the honeycombs, the jiggies, the Mumbo tokens and the note doors' thresholds,
+ * bkbt_apHoneycombs, bkbt_apJiggies, bkbt_apTokens and bkbt_apNoteDoors below), read by the client, all
+ * 0 at every boot. */
 BkbtApLocations bkbt_ap_locations = { { 0 } };
 
 /* mainLoop iterations on which bkbt_frame copied the items from the client. For the
@@ -230,6 +231,10 @@ s32 bkbt_jiggies_given = 0;
  * reason. */
 s32 bkbt_tokens_given = 0;
 
+/* The notes each note door costs (include/bkbt.h): retail's note_door_cost_data, which is in the Lair's
+ * overlay and so in RAM only while Banjo is in the Lair. Initialised data, a global for the map. */
+s16 bkbt_note_door_costs[BKBT_AP_NOTE_DOORS] = {50, 180, 260, 350, 450, 640, 765, 810, 828, 846, 864, 882};
+
 /* core2 functions used below that no header declares. */
 bool honeycombscore_get(enum honeycomb_e indx);                /* src/core2/honeycombscore.c */
 s32 honeycombscore_get_total(void);                            /* src/core2/honeycombscore.c */
@@ -244,6 +249,7 @@ u32 jiggyscore_isCollected(enum jiggy_e jiggy_id);             /* src/core2/jigg
 bool mumboscore_get(enum mumbotoken_e indx);                   /* src/core2/mumboscore.c */
 s32 item_adjustByDiff(enum item_e item, s32 diff, s32 no_hud); /* src/core2/code_BEF20.c */
 bool func_802FADD4(enum item_e item_id); /* src/core2/code_73640.c: the item's HUD counter is showing or coming in */
+s32 itemscore_noteScores_getTotal(void); /* src/core2/code_BEF20.c: the sum of the worlds' best note counts */
 extern f32 itemPrintValues[];            /* src/core2/code_73640.c: the number each HUD counter shows */
 
 static bool bkbt_apItemsAllowed(void) {
@@ -411,6 +417,33 @@ static void bkbt_apTokens(void) {
     bkbt_apGiveHeld(ITEM_1C_MUMBO_TOKEN, MIN(bkbt_ap_items.tokens, BKBT_AP_TOKEN_MAX), &bkbt_tokens_given, FALSE);
 }
 
+/* The note doors' thresholds (include/bkbt.h), on every mainLoop iteration while the chosen game is in
+ * play: reached once the total of the worlds' best note counts, the total retail's doors compare with
+ * their costs, reaches a door's cost. The best counts change as notes are picked up, not only when a
+ * world is left (itemscore_noteScores_update, src/core2/code_BEF20.c), and the game saves them, so a
+ * threshold comes back with the file. */
+static void bkbt_apNoteDoors(void) {
+    s32 total;
+    s32 door;
+
+    if (!bkbt_file_chosen) {
+        return;
+    }
+
+    total = itemscore_noteScores_getTotal();
+    for (door = 1; door < BKBT_AP_NOTE_DOOR_SLOTS; door++) {
+        bkbt_ap_locations.note_doors[door] = total >= bkbt_note_door_costs[door - 1];
+    }
+}
+
+/* The note doors received (include/bkbt.h), for the door actor (src/lair/lairspawnqueue.c), which asks
+ * while Banjo is near it: the door opens on its item instead of on a note total. */
+bool bkbt_apNoteDoorReceived(s32 door) {
+    return bkbt_apItemsAllowed() &&
+        door >= 1 && door < BKBT_AP_NOTE_DOOR_SLOTS &&
+        bkbt_ap_items.note_doors[door] != 0;
+}
+
 /* The Archipelago anchor (include/bkbt.h). Initialised data, so it is right from the first instruction:
  * bkbt_init only has to publish its address. A global, so that the map carries it for the tools. */
 BkbtApAnchor bkbt_ap_anchor = {
@@ -519,6 +552,7 @@ void bkbt_frame(void) {
     bkbt_apHoneycombs();
     bkbt_apJiggies();
     bkbt_apTokens();
+    bkbt_apNoteDoors();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the

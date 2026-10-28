@@ -101,7 +101,7 @@ const BkbtApSettings *bkbt_apSettings(void); /* src/core1/code_0.c: the settings
 bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once the client has written the settings since boot */
 
 /* The items the player has received (hack feature 3: the moves since layout 0.3.0, the empty honeycombs
- * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0). The client writes them and this
+ * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors since 0.8.0). The client writes them and this
  * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
  * nothing new. The seed commits these as well: the client writes the settings and the items first and
  * the seed last, and starts from seed 0 to change them in a running game. Every boot starts them at 0,
@@ -112,19 +112,27 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 #define BKBT_AP_HONEYCOMB_MAX 24 /* empty honeycombs in the game, enum honeycomb_e 1..0x18 (include/enums.h) */
 #define BKBT_AP_JIGGY_MAX 100 /* jiggies in the game, enum jiggy_e 1..0x64 (include/enums.h) */
 #define BKBT_AP_TOKEN_MAX 115 /* Mumbo tokens in the game, enum mumbotoken_e 1..0x73 (include/enums.h) */
+/* The Lair's note doors, the door actor's selector 1..12 (50 .. 882 notes; FILEPROG_39 + selector is the
+ * door's open flag, src/lair/lairspawnqueue.c). A door received opens when Banjo next comes near it,
+ * instead of at a note total; the total reaching a door's cost is a location (below). */
+#define BKBT_AP_NOTE_DOORS 12
+#define BKBT_AP_NOTE_DOOR_SLOTS 13 /* indexed by the door's selector, 1..12; [0] is never set */
 
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
     u8 honeycombs;                /* +0x14: empty honeycombs received; more than BKBT_AP_HONEYCOMB_MAX reads as that (since 0.5.0) */
     u8 jiggies;                   /* +0x15: jiggies received; more than BKBT_AP_JIGGY_MAX reads as that (since 0.6.0) */
     u8 tokens;                    /* +0x16: Mumbo tokens received; more than BKBT_AP_TOKEN_MAX reads as that (since 0.7.0) */
-    u8 padding;                   /* +0x17: 0. Named, so that the room left for the next field is visible */
-} BkbtApItems;                    /* 24 bytes */
+    u8 padding;                   /* +0x17: 0. Left free, so that the note doors start on a word */
+    u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x18: indexed by the note door's selector; not 0 = received (since 0.8.0) */
+    u8 padding2[3];               /* +0x25: 0. Named, so that the room left for the next field is visible */
+} BkbtApItems;                    /* 40 bytes since 0.8.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0) */
 
 extern BkbtApItems bkbt_ap_items;
 
 /* The locations the player has checked (hack feature 4: the molehills since layout 0.4.0, the empty
- * honeycombs since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0). The game writes them and the client only reads them:
+ * honeycombs since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors'
+ * thresholds since 0.8.0). The game writes them and the client only reads them:
  * one writer. The client sends a check for every byte that is not 0 and that it has not sent yet; the
  * server ignores a check it already has. A byte can go back to 0 when another game is chosen, so a
  * client only ever adds checks.
@@ -138,7 +146,13 @@ extern BkbtApItems bkbt_ap_items;
  * The honeycombs, the jiggies and the Mumbo tokens: copies of the game's own records of the empty
  * honeycombs, the jiggies and the tokens picked up (src/core2/honeycombscore.c, src/core2/jiggyscore.c,
  * src/core2/mumboscore.c, which the game saves itself), made on every main-loop iteration while the
- * chosen game is in play (bkbt_file_chosen), so never from a file the file select is only showing. */
+ * chosen game is in play (bkbt_file_chosen), so never from a file the file select is only showing.
+ *
+ * The note doors' thresholds: not 0 once the total of the worlds' best note counts
+ * (itemscore_noteScores_getTotal, src/core2/code_BEF20.c, the total retail's doors read) has reached the
+ * door's cost (bkbt_note_door_costs), whether or not Banjo is near the door. Worked out on every
+ * main-loop iteration while bkbt_file_chosen, like the copies above; nothing to save, since the game
+ * saves the best counts. */
 #define BKBT_AP_HONEYCOMB_SLOTS 0x19 /* indexed by enum honeycomb_e, 1..0x18; [0] is never set (HONEYCOMB_COUNT in src/core2/honeycombscore.c) */
 #define BKBT_AP_JIGGY_SLOTS 0x65 /* indexed by enum jiggy_e, 1..0x64; [0] is never set (include/enums.h) */
 #define BKBT_AP_TOKEN_SLOTS 0x74 /* indexed by enum mumbotoken_e, 1..0x73; [0] is never set (include/enums.h) */
@@ -150,7 +164,9 @@ typedef struct {
     u8 jiggies[BKBT_AP_JIGGY_SLOTS]; /* +0x30: indexed by enum jiggy_e; not 0 = picked up (since 0.6.0) */
     u8 padding2[3];                 /* +0x95: 0 */
     u8 tokens[BKBT_AP_TOKEN_SLOTS]; /* +0x98: indexed by enum mumbotoken_e; not 0 = picked up (since 0.7.0) */
-} BkbtApLocations;                  /* 268 bytes since 0.7.0 (48 in 0.5.0, 152 in 0.6.0) */
+    u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x10C: indexed by the note door's selector; not 0 = its threshold reached (since 0.8.0) */
+    u8 padding3[3];                 /* +0x119: 0 */
+} BkbtApLocations;                  /* 284 bytes since 0.8.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0) */
 
 extern BkbtApLocations bkbt_ap_locations;
 
@@ -177,6 +193,16 @@ extern s32 bkbt_jiggies_given;
  * (bkbt_saveData_loadAP), zeroed by clearScoreStates. */
 extern s32 bkbt_tokens_given;
 
+/* src/core1/code_0.c: the notes each note door costs, by selector - 1: retail's costs
+ * (note_door_cost_data, src/lair/lairspawnqueue.c:481), copied into core1, which unlike the Lair's
+ * overlay is always in RAM. In the hack build only the thresholds read them: the doors open on their
+ * items. */
+extern s16 bkbt_note_door_costs[BKBT_AP_NOTE_DOORS];
+
+/* src/core1/code_0.c: TRUE when the client has sent note door `door` (its selector, 1..12) and items
+ * apply; the door actor opens on this instead of on a note total (src/lair/lairspawnqueue.c). */
+bool bkbt_apNoteDoorReceived(s32 door);
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -190,7 +216,7 @@ extern s32 bkbt_tokens_given;
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 7
+#define BKBT_AP_VERSION_MINOR 8
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -207,8 +233,8 @@ typedef struct {
     u8 version_minor;           /* +0x0A */
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
-    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0) */
-    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0) */
+    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0) */
+    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0) */
 } BkbtApAnchor;                 /* 24 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
