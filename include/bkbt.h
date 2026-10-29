@@ -132,7 +132,7 @@ extern BkbtApItems bkbt_ap_items;
 
 /* The locations the player has checked (hack feature 4: the molehills since layout 0.4.0, the empty
  * honeycombs since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors'
- * thresholds since 0.8.0). The game writes them and the client only reads them:
+ * thresholds since 0.8.0, Gruntilda beaten since 0.9.0). The game writes them and the client only reads them:
  * one writer. The client sends a check for every byte that is not 0 and that it has not sent yet; the
  * server ignores a check it already has. A byte can go back to 0 when another game is chosen, so a
  * client only ever adds checks.
@@ -152,7 +152,11 @@ extern BkbtApItems bkbt_ap_items;
  * (itemscore_noteScores_getTotal, src/core2/code_BEF20.c, the total retail's doors read) has reached the
  * door's cost (bkbt_note_door_costs), whether or not Banjo is near the door. Worked out on every
  * main-loop iteration while bkbt_file_chosen, like the copies above; nothing to save, since the game
- * saves the best counts. */
+ * saves the best counts.
+ *
+ * Gruntilda beaten, the Archipelago goal (since 0.9.0): a copy of the game's own saved flag
+ * FILEPROG_FC_DEFEAT_GRUNTY, which the final battle sets (src/fight/chfinalboss.c), made on every
+ * main-loop iteration while bkbt_file_chosen, like the copies above. */
 #define BKBT_AP_HONEYCOMB_SLOTS 0x19 /* indexed by enum honeycomb_e, 1..0x18; [0] is never set (HONEYCOMB_COUNT in src/core2/honeycombscore.c) */
 #define BKBT_AP_JIGGY_SLOTS 0x65 /* indexed by enum jiggy_e, 1..0x64; [0] is never set (include/enums.h) */
 #define BKBT_AP_TOKEN_SLOTS 0x74 /* indexed by enum mumbotoken_e, 1..0x73; [0] is never set (include/enums.h) */
@@ -165,7 +169,8 @@ typedef struct {
     u8 padding2[3];                 /* +0x95: 0 */
     u8 tokens[BKBT_AP_TOKEN_SLOTS]; /* +0x98: indexed by enum mumbotoken_e; not 0 = picked up (since 0.7.0) */
     u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x10C: indexed by the note door's selector; not 0 = its threshold reached (since 0.8.0) */
-    u8 padding3[3];                 /* +0x119: 0 */
+    u8 gruntilda_beaten;            /* +0x119: not 0 = FILEPROG_FC_DEFEAT_GRUNTY set, the goal (since 0.9.0; padding before) */
+    u8 padding3[2];                 /* +0x11A: 0 */
 } BkbtApLocations;                  /* 284 bytes since 0.8.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0) */
 
 extern BkbtApLocations bkbt_ap_locations;
@@ -216,7 +221,7 @@ bool bkbt_apNoteDoorReceived(s32 door);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 8
+#define BKBT_AP_VERSION_MINOR 9
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything

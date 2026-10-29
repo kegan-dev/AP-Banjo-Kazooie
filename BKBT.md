@@ -139,6 +139,11 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     items grew to 40 bytes, the locations to 284; the anchor itself is unchanged). No save change.
     `include/bkbt.h`, `src/core1/code_0.c`, `src/lair/lairspawnqueue.c`, `src/core2/code_956B0.c` ("Note
     doors as Archipelago items and locations" below).
+18. **The goal: Gruntilda beaten** (2026-10-28; `docs/ROADMAP.md` of the BKBT repository, the client): the
+    game publishes its own saved flag `FILEPROG_FC_DEFEAT_GRUNTY` as `bkbt_ap_locations.gruntilda_beaten`
+    (layout 0.9.0: a padding byte of the locations, which stay 284 bytes; the anchor itself is unchanged),
+    and the client sends the goal when it reads 1. No save change. `include/bkbt.h`, `src/core1/code_0.c`,
+    `src/core2/code_956B0.c` ("The goal: Gruntilda beaten" below).
 
 ## The frame hook
 
@@ -525,18 +530,18 @@ With `BKBT=1` and the Expansion Pak, the word at physical `0x400000` holds the K
 settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of the same day, "The
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
 same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, 0.7.0,
-the Mumbo tokens of the same day, and 0.8.0, the note doors of that day, which grew the structs it points
-to). An
+the Mumbo tokens of the same day, 0.8.0, the note doors of that day, which grew the structs it points
+to, and 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:206-240`), big-endian like everything the client reads, version 0.8.0
-  since the note doors of 2026-10-27 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+- **The layout** (`include/bkbt.h:211-245`), big-endian like everything the client reads, version 0.9.0
+  since Gruntilda beaten of 2026-10-28 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
-  jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day):
+  jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -545,7 +550,7 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x05` | `u8 padding` | 0 |
   | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 8 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0) |
+  | `+0x0A` | `u8 version_minor` | 9 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -555,8 +560,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
   layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
   from 20 to 48, in 0.6.0 the locations to 152 and in 0.7.0 to 268 (the items took a byte of their
-  padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor.
-  Later features append
+  padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor;
+  0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -618,7 +623,10 @@ ROM (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). By hand, the owner r
 that on Project64 3.0.1 and ares v148 the chord both ways, a save and a load in Banjo-Kazooie and the logo
 skip still work in the normal image of this build; the anchor cannot be seen by a player and was not read
 there. Not checked: a console, where the KSEG1 store matters; any client (none exists for BK yet, and
-EmuLoader has not attached by this word); any emulator but mupen64plus for the anchor itself.
+EmuLoader has not attached by this word); any emulator but mupen64plus for the anchor itself. Since
+2026-10-28 the BKBT repository's client (`worlds/banjo_kazooie/BKClient.py`) attaches by this word through
+EmuLoader (`client/hack.py`, `validate`: the word, the magic and `game_id` 1), checked on mupen64plus with
+`tools/bk_client_check.py` there; not yet on another emulator.
 
 ## The Archipelago settings
 
@@ -1380,6 +1388,44 @@ anchor check (`hack/DUALBOOT.md` of the BKBT repository, "Checked"): see there f
 tried it by hand on 2026-10-28 on Project64 3.0.1 and ares v148 with the BKBT repository's hand client, in
 the dual-boot image, doors 1 and 2 (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not checked: a
 console, any client but the stand-ins, doors 3 to 12, the ROM by itself by hand.
+
+## The goal: Gruntilda beaten
+
+With `BKBT=1` the game publishes whether Gruntilda is beaten, the Archipelago goal, for the client, which
+sends the server its goal when it reads 1. There is no switch: every hack build, by itself and in the
+dual-boot image; the matching build has none of it. Done on 2026-10-28 with the client (`docs/ROADMAP.md`
+of the BKBT repository), built by Claude with the owner reviewing; the owner's decision of that day: the
+hack publishes it, rather than the client reading the game's flags.
+
+- **How retail does it.** The final battle sets `FILEPROG_FC_DEFEAT_GRUNTY` when Gruntilda falls
+  (`chfinalboss_setBossDefeated`, `src/fight/chfinalboss.c:2252`), at the start of a camera sequence of
+  several seconds; the game saves the flag with the file, and reads it for the ending's extras
+  (`src/core2/code_956B0.c:1459`, `src/core2/code_14420.c:909-936`) and the Lair's cauldrons
+  (`src/lair/ch/cauldron.c:181`).
+- **The layout** (`include/bkbt.h:164-174`; layout 0.9.0, `BKBT_AP_VERSION_MINOR` 9): `+0x119 u8
+  gruntilda_beaten` of the locations, the first of the three padding bytes behind the note doors' thresholds,
+  then 2 bytes of padding: the locations stay 284 bytes and the anchor 24. Not 0 means the flag is set. The
+  game is the only writer and the client only reads, as for every location. A client reads the byte only
+  from a ROM whose anchor says 0.9.0 or later: in a 0.8.0 ROM it is padding, always 0.
+- **Where.** `bkbt_apGoal` (`src/core1/code_0.c`), called from `bkbt_frame` after the note doors' thresholds,
+  copies `fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY) != 0` into the byte on every main-loop iteration
+  while `bkbt_file_chosen`, so never from a file the file select only shows; `clearScoreStates`
+  (`src/core2/code_956B0.c`) zeroes it with the other locations. No save change: the flag is saved, so
+  the goal comes back with the file.
+- **For the tools.** The BKBT repository's goal check (`tools/bk_goal_check.py`) plants a game with the flag
+  or sets it in RAM mid-game and reads the byte through the anchor; the anchor check wants 0.9.0; the seed
+  check's padding test leaves `+0x119` out; the hand client prints the byte; the client check
+  (`tools/bk_client_check.py`) plays the client's own code against it.
+- **What it costs.** 80 bytes of RAM headroom (lair ends at `0x803958B0`, `lair_VRAM_END`) and 304 of ROM
+  room (22,544 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** A copy, not an event: a file that has the flag publishes 1 from the A that loads it,
+  and the client sends its goal then (the server takes it once).
+
+Checked on mupen64plus on 2026-10-28 with the BKBT repository's goal check (`--expect beaten`, `not` and
+`set`, on the ROM by itself and on the autotest image), the client check and the anchor check (`hack/DUALBOOT.md`
+of the BKBT repository, "Checked"). The fault of a copy from the wrong flag (`FILEPROG_FC_DEFEAT_GRUNTY -
+1`) failed the goal check (`beaten`, `set`) and the client check (`goal`). Not checked: a console, the final
+battle itself (the checks plant the flag or set it), any emulator by hand.
 
 ## Rules for new code
 

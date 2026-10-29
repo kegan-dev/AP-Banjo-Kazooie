@@ -1519,6 +1519,7 @@ void clearScoreStates(void) {
     for (i = 0; i < BKBT_AP_NOTE_DOOR_SLOTS; i++) {
         bkbt_ap_locations.note_doors[i] = 0;
     }
+    bkbt_ap_locations.gruntilda_beaten = 0;
 #endif
 }
 

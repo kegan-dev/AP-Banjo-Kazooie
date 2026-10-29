@@ -436,6 +436,16 @@ static void bkbt_apNoteDoors(void) {
     }
 }
 
+/* Gruntilda beaten (include/bkbt.h), the Archipelago goal, on every mainLoop iteration while the chosen
+ * game is in play: a copy of the game's own flag, which the final battle sets and the game saves, so it
+ * comes back with the file too. */
+static void bkbt_apGoal(void) {
+    if (!bkbt_file_chosen) {
+        return;
+    }
+    bkbt_ap_locations.gruntilda_beaten = fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY) != 0;
+}
+
 /* The note doors received (include/bkbt.h), for the door actor (src/lair/lairspawnqueue.c), which asks
  * while Banjo is near it: the door opens on its item instead of on a note total. */
 bool bkbt_apNoteDoorReceived(s32 door) {
@@ -553,6 +563,7 @@ void bkbt_frame(void) {
     bkbt_apJiggies();
     bkbt_apTokens();
     bkbt_apNoteDoors();
+    bkbt_apGoal();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the
