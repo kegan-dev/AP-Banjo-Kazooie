@@ -166,7 +166,13 @@ s32 item_adjustByDiff(enum item_e item, s32 diff, s32 no_hud){
 s32 item_adjustByDiffWithHud(enum item_e item, s32 diff){
     // Modifies the count of an item by the diff
     // Displays the HUD during the adjustment
+#if BKBT
+    /* Retail returns nothing and its callers (src/core2/ch/jinjo.c) read what item_adjustByDiff left in
+     * v0; say it */
+    return item_adjustByDiff(item, diff, 0);
+#else
     item_adjustByDiff(item, diff, 0);
+#endif
 }
 
 // func_803463F4

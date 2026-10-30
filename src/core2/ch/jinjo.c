@@ -1,6 +1,10 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+#if BKBT
+#include "bkbt.h"
+enum level_e level_get(void); /* src/core2/code_9A740.c */
+#endif
 
 extern void subaddie_set_state_with_direction(Actor *, s32, f32 , s32);
 extern f32 mapModel_getWaterSurfaceY(f32*);
@@ -64,6 +68,15 @@ void __chJinjo_collected(ActorMarker *this, ActorMarker *other){
             fileProgressFlag_set(FILEPROG_E_JINJO_TEXT, 1);
         }
         subaddie_set_state_with_direction(actorPtr, CH_JINJO_STATE_6_COLLECTED, 0.0f , -1);
+#if BKBT
+        /* While the chosen game is in play the Jinjo is an Archipelago location: it sets its check and
+         * gives nothing, so no heads show and no jiggy comes from here (unk4 stays 0, and the plain
+         * jingle plays). Its item comes from the client like any other, and the level's mask and Jinjo
+         * jiggy follow the Jinjos received (src/core1/code_0.c, include/bkbt.h). Demos are retail's. */
+        if(bkbt_apJinjosActive(level_get())){
+            bkbt_apJinjoCheck(level_get(), this->id - MARKER_5A_JINJO_BLUE);
+        } else
+#endif
         /*
         If multiple Jinjos of a color are collected, it overflows into the next Jinjo.
         Example, two Green Jinjos -> Orange Jinjo collected & no Green Jinjo collected
@@ -131,6 +144,15 @@ void chJinjo_update(Actor * this){
         if(volatileFlag_get(VOLATILE_FLAG_C1_IN_FINAL_CHARACTER_PARADE)){
             marker_despawn(this->marker);
         }
+#if BKBT
+        /* A Jinjo already checked in the chosen game does not come back, as a Mumbo token picked up does
+         * not (src/core2/ch/mumbotoken.c). Return at once: marker_despawn can free the actor. */
+        else if(bkbt_apJinjosActive(level_get())
+                && bkbt_apJinjoChecked(level_get(), this->marker->id - MARKER_5A_JINJO_BLUE)){
+            marker_despawn(this->marker);
+            return;
+        }
+#endif
     }//L802CDE24
     this_position = this->position;
     func_8028E964(sp7C);

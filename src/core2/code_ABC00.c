@@ -1,6 +1,9 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void func_80347B54(Struct81s *);
 extern void func_80347B80(Struct81s *);
@@ -215,6 +218,10 @@ void func_80332E08(void) {
         func_80332D98(MAP_6A_GL_TTC_AND_CC_PUZZLE, JIGGY_35_LAIR_CC_WITCH_SWITCH, FILEPROG_9D_LAIR_CC_WITCH_SWITCH_RIGHT_EYE_PRESSED, 0x190);
     }
     D_8036E830 = 1;
+#if BKBT
+    /* The level's Jinjo jiggy, once the client has sent its five Jinjos (src/core1/code_0.c) */
+    bkbt_apJinjoJiggy();
+#endif
 }
 
 void jiggylist_draw(Gfx **gfx, Mtx **mtx, Vtx **vtx) {
@@ -314,6 +321,12 @@ void func_803333DC(Struct81s *arg0, Actor *arg1) {
     marker_setFreeMethod(arg1->marker, jiggy_free);
     jiggy_id = ((s32) ((s32)arg0 - (s32)&jiggylist_list) / 0x2C) + 1;
     chjiggy_setJiggyId(arg1, jiggy_id);
+#if BKBT
+    /* The hack's Jinjo jiggy, spawned on Banjo, is taken there: held, not thrown (src/core1/code_0.c) */
+    if (arg1->is_bundle && bkbt_apIsJinjoJiggy(jiggy_id)) {
+        bkbt_bundle_holdCollectable(arg1);
+    }
+#endif
     if ((jiggy_id == JIGGY_49_CCW_EYRIE) || (jiggy_id == JIGGY_39_LAIR_MMM_WITCH_SWITCH) || (jiggy_id == JIGGY_3C_LAIR_CCW_WITCH_SWITCH)) {
         arg1->marker->unk40_21 = TRUE;
         arg1->marker->unk40_20 = TRUE;

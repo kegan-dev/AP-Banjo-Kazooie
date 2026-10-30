@@ -1520,6 +1520,13 @@ void clearScoreStates(void) {
         bkbt_ap_locations.note_doors[i] = 0;
     }
     bkbt_ap_locations.gruntilda_beaten = 0;
+    /* The Jinjos picked up go with the game they belong to, like the given counts above. */
+    for (i = 0; i < BKBT_AP_JINJO_LEVELS; i++) {
+        bkbt_jinjos_checked[i] = 0;
+    }
+    for (i = 0; i < BKBT_AP_JINJO_SLOTS; i++) {
+        bkbt_ap_locations.jinjos[i] = 0;
+    }
 #endif
 }
 

@@ -231,6 +231,10 @@ s32 bkbt_jiggies_given = 0;
  * reason. */
 s32 bkbt_tokens_given = 0;
 
+/* The Jinjos picked up in the chosen game, a mask per level (include/bkbt.h), saved with the game.
+ * Initialised data, a global for the save code and the map. */
+u8 bkbt_jinjos_checked[BKBT_AP_JINJO_LEVELS] = {0};
+
 /* The notes each note door costs (include/bkbt.h): retail's note_door_cost_data, which is in the Lair's
  * overlay and so in RAM only while Banjo is in the Lair. Initialised data, a global for the map. */
 s16 bkbt_note_door_costs[BKBT_AP_NOTE_DOORS] = {50, 180, 260, 350, 450, 640, 765, 810, 828, 846, 864, 882};
@@ -251,6 +255,11 @@ s32 item_adjustByDiff(enum item_e item, s32 diff, s32 no_hud); /* src/core2/code
 bool func_802FADD4(enum item_e item_id); /* src/core2/code_73640.c: the item's HUD counter is showing or coming in */
 s32 itemscore_noteScores_getTotal(void); /* src/core2/code_BEF20.c: the sum of the worlds' best note counts */
 extern f32 itemPrintValues[];            /* src/core2/code_73640.c: the number each HUD counter shows */
+enum level_e level_get(void);            /* src/core2/code_9A740.c: the level Banjo is in */
+int jiggyscore_isSpawned(enum jiggy_e jiggy_id); /* src/core2/jiggyscore.c: spawned this level visit, or collected */
+bool player_isStable(void);              /* src/core2/playerutils.c: Banjo stands on the ground */
+int gcdialog_hasCurrentTextId(void);     /* src/core2/gc/dialog.c: a text is on the screen */
+int gctransition_done(void);             /* src/core2/gc/transition.c: no map transition is running */
 
 static bool bkbt_apItemsAllowed(void) {
     enum map_e map;
@@ -446,6 +455,128 @@ static void bkbt_apGoal(void) {
     bkbt_ap_locations.gruntilda_beaten = fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY) != 0;
 }
 
+/* The Jinjos (include/bkbt.h). The nine levels with Jinjos, enum level_e 1..0xA without the Lair. */
+static bool bkbt_jinjoLevel(s32 level) {
+    return level >= LEVEL_1_MUMBOS_MOUNTAIN && level <= LEVEL_A_MAD_MONSTER_MANSION &&
+        level != LEVEL_6_LAIR;
+}
+
+bool bkbt_apJinjosActive(s32 level) {
+    return bkbt_file_chosen && bkbt_jinjoLevel(level);
+}
+
+bool bkbt_apJinjoChecked(s32 level, s32 colour) {
+    return bkbt_jinjoLevel(level) && colour >= 0 && colour < BKBT_AP_JINJO_COLOURS &&
+        (bkbt_jinjos_checked[level - 1] & (1 << colour)) != 0;
+}
+
+void bkbt_apJinjoCheck(s32 level, s32 colour) {
+    if (bkbt_jinjoLevel(level) && colour >= 0 && colour < BKBT_AP_JINJO_COLOURS) {
+        bkbt_jinjos_checked[level - 1] |= 1 << colour;
+    }
+}
+
+/* The Jinjos the client has sent for `level`, as a mask in the game's bit order. */
+static s32 bkbt_apJinjosReceived(s32 level) {
+    s32 mask = 0;
+    s32 colour;
+
+    for (colour = 0; colour < BKBT_AP_JINJO_COLOURS; colour++) {
+        if (bkbt_ap_items.jinjos[BKBT_AP_JINJO_INDEX(level, colour)] != 0) {
+            mask |= 1 << colour;
+        }
+    }
+    return mask;
+}
+
+/* At a level entry (level_load, src/core2/code_9A740.c, right after it zeroes the level's mask; also on
+ * the reload after a death): the mask becomes the Jinjos received, quietly, so that the heads do not
+ * come up at every entry. bkbt_apItemsAllowed is not asked: level_load runs before the new map is set
+ * and outside the normal game mode. While the seed is not committed the client is changing its items,
+ * and the mask follows them at the next arrival (bkbt_apJinjos). */
+void bkbt_apJinjosLevelEntry(s32 level) {
+    if (!bkbt_apJinjosActive(level) || !bkbt_apSettingsCommitted()) {
+        return;
+    }
+    item_adjustByDiff(ITEM_12_JINJOS, bkbt_apJinjosReceived(level) - item_getCount(ITEM_12_JINJOS), TRUE);
+}
+
+/* On every mainLoop iteration while the chosen game is in play: the locations, a copy of the checked
+ * Jinjos (the game keeps no record of its own), and the level's mask, which follows the Jinjos received
+ * while Banjo is in the level. A Jinjo that arrives shows the heads, as one picked up does in retail; one
+ * taken back goes quietly. */
+static void bkbt_apJinjos(void) {
+    s32 level;
+    s32 colour;
+    s32 want;
+    s32 have;
+
+    if (!bkbt_file_chosen) {
+        return;
+    }
+
+    for (level = 1; level <= BKBT_AP_JINJO_LEVELS; level++) {
+        for (colour = 0; colour < BKBT_AP_JINJO_COLOURS; colour++) {
+            bkbt_ap_locations.jinjos[BKBT_AP_JINJO_INDEX(level, colour)] = bkbt_apJinjoChecked(level, colour);
+        }
+    }
+
+    level = level_get();
+    if (!bkbt_jinjoLevel(level) || !bkbt_apItemsAllowed() || !func_8028F070() || player_isDead()) {
+        return;
+    }
+    want = bkbt_apJinjosReceived(level);
+    have = item_getCount(ITEM_12_JINJOS);
+    if (want != have) {
+        item_adjustByDiff(ITEM_12_JINJOS, want - have, (want & ~have) == 0);
+    }
+}
+
+/* The level's Jinjo jiggy, on Banjo once the client has sent the level's five Jinjos. Called at the
+ * end of the world update (func_80332E08, src/core2/code_ABC00.c), where retail spawns the witch
+ * switches' jiggies: a jiggy queued there is not lost to a map change later in the same iteration, as one
+ * queued from bkbt_frame, which runs before the world update, would be. jiggy_spawn marks the jiggy
+ * spawned for the rest of the level visit (the mark is cleared at level entry), so it comes once a visit:
+ * a jiggy left behind stays in its map, and comes again at the next entry or after a death. Collected,
+ * it reads as spawned too. Only while Banjo stands, in control, with no text, transition, minigame or
+ * parade going on, at his position and 50 up, where the fifth Jinjo would have spawned it. There it is
+ * held, not thrown, and can be picked up at once (bkbt_apIsJinjoJiggy), so Banjo takes it where he is:
+ * thrown, as the jiggy list throws it, it came down where he had stood, which at a level's entry is beside
+ * the exit (the owner's hand test on ares v148, 2026-10-29). */
+void bkbt_apJinjoJiggy(void) {
+    s32 level;
+    enum jiggy_e jiggy;
+    f32 position[3];
+
+    level = level_get();
+    if (!bkbt_apJinjosActive(level) || !bkbt_apItemsAllowed() ||
+        bkbt_apJinjosReceived(level) != BKBT_AP_JINJO_ALL) {
+        return;
+    }
+    jiggy = 10 * level - 9; /* the level's Jinjo jiggy, as src/core2/ch/jinjo.c spawns it */
+    if (jiggyscore_isSpawned(jiggy) ||
+        !func_8028F070() || player_isDead() || !player_isStable() ||
+        !gctransition_done() || gcdialog_hasCurrentTextId() ||
+        volatileFlag_get(VOLATILE_FLAG_1) ||
+        volatileFlag_get(VOLATILE_FLAG_2_FF_IN_MINIGAME) ||
+        volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE)) {
+        return;
+    }
+    player_getPosition(position);
+    position[1] += 50.0f;
+    jiggy_spawn(jiggy, position);
+}
+
+/* The level's Jinjo jiggy while the Jinjos are Archipelago's (bkbt_apJinjosActive), when bkbt_apJinjoJiggy
+ * is its only spawner: a pickup no longer fills the level's mask (src/core2/ch/jinjo.c). Asked by
+ * func_803333DC (src/core2/code_ABC00.c) as a jiggy of the jiggy list spawns. */
+bool bkbt_apIsJinjoJiggy(s32 jiggy) {
+    s32 level;
+
+    level = level_get();
+    return bkbt_apJinjosActive(level) && jiggy == 10 * level - 9;
+}
+
 /* The note doors received (include/bkbt.h), for the door actor (src/lair/lairspawnqueue.c), which asks
  * while Banjo is near it: the door opens on its item instead of on a note total. */
 bool bkbt_apNoteDoorReceived(s32 door) {
@@ -564,6 +695,7 @@ void bkbt_frame(void) {
     bkbt_apTokens();
     bkbt_apNoteDoors();
     bkbt_apGoal();
+    bkbt_apJinjos();
 
     /* The chord: L + R + Start on pad 0, as the controller last answered (bkbt_padButton in joy.c, not
      * the game's pad state, which a demo overwrites). Start arrives as START_BUTTON or as the

@@ -113,6 +113,15 @@ void chBellBuoy_update(Actor* this){
 
     if(local->jinjoMarker){
         jinjo = marker_getActor(local->jinjoMarker);
+#if BKBT
+        /* In the hack build a Jinjo already checked despawns as it starts (src/core2/ch/jinjo.c). Should
+         * the buoy have taken its marker before that, the marker would lead to another actor, or to a
+         * freed one: let it go, and carry nothing. */
+        if(jinjo->despawn_flag || jinjo->marker != local->jinjoMarker
+           || local->jinjoMarker->id < MARKER_5A_JINJO_BLUE || local->jinjoMarker->id > MARKER_5E_JINJO_YELLOW){
+            local->jinjoMarker = NULL;
+        }else
+#endif
         // State 7-9 Are Collecting Jinjo States
         if(!(jinjo->state < 7)){
             local->jinjoMarker = NULL;

@@ -398,6 +398,10 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
      * same record */
     bkbt_jiggies_given = saveData->jiggies_given;
     bkbt_tokens_given = saveData->tokens_given;
+    /* The Jinjos picked up, which the game itself does not keep */
+    for (i = 0; i < BKBT_AP_JINJO_LEVELS; i++) {
+        bkbt_jinjos_checked[i] = saveData->jinjos_checked[i];
+    }
 }
 #endif
 
@@ -425,6 +429,9 @@ void saveData_create(SaveData *savedata){
     }
     savedata->jiggies_given = bkbt_jiggies_given;
     savedata->tokens_given = bkbt_tokens_given;
+    for (i = 0; i < BKBT_AP_JINJO_LEVELS; i++) {
+        savedata->jinjos_checked[i] = bkbt_jinjos_checked[i];
+    }
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));
 }

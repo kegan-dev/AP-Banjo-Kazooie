@@ -1,6 +1,9 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern bool mapModel_intersectMovingSphere(f32[3], f32[3], f32, f32 sp54[3], s32, s32);
 extern bool func_80320C94(f32[3], f32[3], f32, f32 sp54[3], s32, s32);
@@ -387,3 +390,16 @@ bool func_802C9C14(Actor *actor){
     Bundle *ptr = (Bundle *)&actor->unkBC;
     return ptr->unk2C < 1U;
 }
+
+#if BKBT
+/* A bundle held where it was spawned, and collectable at once: for the hack's Jinjo jiggy
+ * (src/core2/code_ABC00.c, func_803333DC). A bundle in flight cannot be picked up until it has landed or
+ * flown 1.2 s (func_802C9C14 above, src/core2/ba/marker.c:265), and the jiggy list throws a jiggy (bundle 7,
+ * Mumbo's Mountain's: 1000 up), so it came down where Banjo had been. Idle, it does not move. */
+void bkbt_bundle_holdCollectable(Actor *actor) {
+    Bundle *bundle = (Bundle *)&actor->unkBC;
+
+    bundle->state = BUNDLE_STATE_3_IDLE;
+    bundle->unk2C = 1;
+}
+#endif

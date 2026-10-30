@@ -56,7 +56,8 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    `include/core1/eeprom.h`, the record lengths in `src/core2/code_B5040.c` and `src/core2/code_B5E00.c`,
    and the linker symbol `bkbt_sram_offset` with its assertions in `manual_syms.us.v10.txt`. From
    2026-10-14 to 2026-10-26 only inside the image, chosen by `bkbt_launched()` in `src/core1/code_0.c`,
-   with retail's 512 bytes; by itself the ROM kept its EEPROM.
+   with retail's 512 bytes; by itself the ROM kept its EEPROM. The game record grew from `0x78` to `0x90`
+   bytes on 2026-10-26 and to `0xA0` with the Jinjos of 2026-10-29 (item 19).
 7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
@@ -144,6 +145,17 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     (layout 0.9.0: a padding byte of the locations, which stay 284 bytes; the anchor itself is unchanged),
     and the client sends the goal when it reads 1. No save change. `include/bkbt.h`, `src/core1/code_0.c`,
     `src/core2/code_956B0.c` ("The goal: Gruntilda beaten" below).
+19. **Jinjos as Archipelago items and locations** (2026-10-29; `docs/ROADMAP.md` of the BKBT repository,
+    hack features 3 and 4): one item and one location per level and colour. A Jinjo picked up sets its
+    check instead of its head, and a checked Jinjo no longer spawns; the level's heads follow the Jinjos
+    received, and its five make the level's Jinjo jiggy appear on Banjo, who takes it at once (layout
+    0.10.0: the items grew
+    to 92 bytes, the locations to 336; the anchor itself is unchanged). The game keeps no record of its
+    Jinjos, so the hack keeps one and saves it: the game record grew from `0x90` to `0xA0` bytes.
+    `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`, `src/core1/eeprom.c`,
+    `manual_syms.us.v10.txt`, `src/core2/ch/jinjo.c`, `src/core2/code_9A740.c`, `src/core2/code_ABC00.c`,
+    `src/core2/code_B5040.c`, `src/core2/code_956B0.c`, `src/core2/code_BEF20.c`, `src/core2/code_41FB0.c`,
+    `src/RBB/ch/bellbuoy.c` ("Jinjos as Archipelago items and locations" below).
 
 ## The frame hook
 
@@ -314,6 +326,7 @@ Tooie hack keeps its save there from offset 0; this game's part starts at `bkbt_
 By itself the ROM has the same layout, and its header declares the SRAM, so that an emulator or a
 flashcart gives it one. So since 2026-10-26 (item 13 above); from 2026-10-14 until then only inside the
 image, chosen by `bkbt_launched()` and with retail's 512 bytes, while the ROM by itself kept its EEPROM.
+Since the Jinjos of 2026-10-29 (item 19) a game record is `0xA0` bytes.
 The full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
 repository, "The save device".
 
@@ -323,15 +336,19 @@ repository, "The save device".
   given and the Mumbo tokens given, "Jiggies as Archipelago items and locations", "Mumbo tokens as
   Archipelago items and locations"), then under `#if BKBT` `u32 seed` at `+0x74` and
   `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
-  Archipelago locations"), then the checksum at `+0x8C`: `0x90` bytes, retail `0x78`. In the SRAM: the
-  records at `0x7000`, `0x7090`, `0x7120`, `0x71B0`, the global record at `0x7240`, this game's part
-  `0x7000..0x725F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`). No magic or version of its own: a save of
-  a build with `0x78`-byte records fails the checksum at the new places and shows as empty files.
+  Archipelago locations"), `u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]` at `+0x8C..+0x95` ("Jinjos as
+  Archipelago items and locations"), `u8 spare[6]` at `+0x96..+0x9B`, 0, kept for the hack, then the
+  checksum at `+0x9C`: `0xA0` bytes since 2026-10-29 (`0x90` from 2026-10-26, with the checksum at
+  `+0x8C`; retail `0x78`). In the SRAM: the records at `0x7000`, `0x70A0`, `0x7140`, `0x71E0`, the global
+  record at `0x7280`, this game's part `0x7000..0x729F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which
+  a compile-time check there holds at `0x2A0` and to whole EEPROM blocks. No magic or version of its own: a
+  save of a build with `0x78`- or `0x90`-byte records fails the checksum at the new places and shows as
+  empty files.
 - **Where.** `src/core1/eeprom.c`, under `#if BKBT`: retail's `eeprom_writeBlocks` and `eeprom_readBlocks`
-  are the `#else` (`:153-178`) and not in the hack build, and `bkbt_write` and `bkbt_read` (`:139-152`,
+  are the `#else` (`:159-184`) and not in the hack build, and `bkbt_write` and `bkbt_read` (`:145-158`,
   declared in `include/core1/eeprom.h:4-12`) take their place, with `offset` and `count` in bytes from the
   start of record `file`, the global record as file 0 at offset `4 * sizeof(SaveData)`. Both call
-  `bkbt_sram(direction, offset, buffer, size)` (`:72-137`), bytes from `bkbt_sram_offset`. Their callers
+  `bkbt_sram(direction, offset, buffer, size)` (`:78-143`), bytes from `bkbt_sram_offset`. Their callers
   in `src/core2/code_B5040.c` pass `sizeof(SaveData)` and `sizeof(GlobalData)` where retail passed 15 and
   4 blocks (`savedata_8033CA2C` `:321-341`, `savedata_8033CA9C` `:343-358`, `savedata_8033CC98`
   `:425-437`, `savedata_8033CE40` `:453-466`); the wipe of a file's old copy stays 8 bytes
@@ -352,8 +369,9 @@ repository, "The save device".
 - **The offset** is the linker symbol `bkbt_sram_offset = 0x7000;` in `manual_syms.us.v10.txt`, used as
   `(u32) bkbt_sram_offset` (`include/bkbt.h`), so that the map carries it for the tools. `0x7000` is the
   border the two games share: below it the SRAM is the Tooie hack's. The link stops if the offset is
-  below `0x7000`, not a multiple of 8, or leaves fewer than 512 bytes in the 32 KiB (the assertion still
-  says `0x200`, not `BKBT_SRAM_BYTES`; at `0x7000` either fits). The Tooie side's copy is
+  below `0x7000`, not a multiple of 8, or leaves fewer than `0x2A0` bytes in the 32 KiB (since the
+  Jinjos; `0x200` before, which no longer matched `BKBT_SRAM_BYTES` from 2026-10-26 on, harmless at
+  `0x7000`); the compile-time check in `src/core1/eeprom.c` keeps `BKBT_SRAM_BYTES` at that number. The Tooie side's copy is
   `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
   `_Static_assert` in its `src/save.c`; nothing compares the two, so change both. The BKBT repository's
   image builder refuses a build whose `bkbt_sram_offset` is not the border.
@@ -365,12 +383,12 @@ repository, "The save device".
   builds the same request (`epidma.c:46-58`), is not among the libultra files this ROM links, and both
   builds share that list (`decompressed.us.v10.yaml`).
 - **The buffer and the cache.** Every transfer goes through `sBkbtSramBuf`, on a 16-byte boundary inside
-  `sBkbtSramRaw` (`eeprom.c:36`) and `BKBT_SRAM_BYTES` (`0x260`, 38 whole cache lines) long, never
+  `sBkbtSramRaw` (`eeprom.c:42`) and `BKBT_SRAM_BYTES` (`0x2A0`, 42 whole cache lines) long, never
   through the caller's buffer, which shares cache lines with other variables. The buffer is written back
   before every transfer and invalidated after a read. Every transfer the game asks for has an SRAM offset
-  and a length that are multiples of 8 (`0x90`, `0x20` and the 8-byte wipe).
+  and a length that are multiples of 8 (`0xA0`, `0x20` and the 8-byte wipe).
 - **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside `BKBT_SRAM_BYTES`, with
-  nothing transferred (`offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset`, `:81`; the constant
+  nothing transferred (`offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset`, `:87`; the constant
   is cast to `s32`, so that the test stays signed: with `sizeof`'s unsigned type it wrapped, found by the
   review of 2026-10-26); 8 (`CONT_NO_RESPONSE_ERROR`) for a write that does not read back as written.
   Every write is read back, into the buffer filled with `0xFF`, because the game wipes a file's old copy
@@ -531,17 +549,19 @@ settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of 
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
 same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, 0.7.0,
 the Mumbo tokens of the same day, 0.8.0, the note doors of that day, which grew the structs it points
-to, and 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte). An
+to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, and 0.10.0, the Jinjos of
+2026-10-29, which grew the structs again). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:211-245`), big-endian like everything the client reads, version 0.9.0
-  since Gruntilda beaten of 2026-10-28 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+- **The layout** (`include/bkbt.h:251-285`), big-endian like everything the client reads, version 0.10.0
+  since the Jinjos of 2026-10-29 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
-  jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day):
+  jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day,
+  0.9.0 with Gruntilda beaten of 2026-10-28):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -550,7 +570,7 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x05` | `u8 padding` | 0 |
   | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 9 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0) |
+  | `+0x0A` | `u8 version_minor` | 10 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -1427,6 +1447,98 @@ of the BKBT repository, "Checked"). The fault of a copy from the wrong flag (`FI
 1`) failed the goal check (`beaten`, `set`) and the client check (`goal`). Not checked: a console, the final
 battle itself (the checks plant the flag or set it), any emulator by hand.
 
+## Jinjos as Archipelago items and locations
+
+With `BKBT=1` each Jinjo is an Archipelago location and an item, one per level and colour: a Jinjo picked
+up is a check that gives nothing, and the client sends the Jinjos received, which light the level's heads;
+the level's five make its Jinjo jiggy appear. There is no switch: every hack build, by itself and in the
+dual-boot image; the matching build has none of it. Done on 2026-10-29 (`docs/ROADMAP.md` of the BKBT
+repository, hack features 3 and 4), built by Claude with the owner reviewing; the owner's decisions of that
+day: a Jinjo item counts only in its own level (Lighthouse's model), a Jinjo picked up stays checked (saved)
+and no longer appears, the Jinjo jiggy appears beside Banjo, and the pickup shows nothing, as the tokens'.
+After the owner's hand test of that day the jiggy appears on Banjo, and he takes it at once ("The Jinjo jiggy").
+
+- **How retail does it** (`src/core2/ch/jinjo.c`; `docs/bk-decomp-notes.md` of the BKBT repository,
+  "Jinjos"). A Jinjo is known only by its colour (marker `0x5A..0x5E`) and the level it is in. The pickup
+  (`__chJinjo_collected`, `:57-76`) adds the colour's bit to `ITEM_12_JINJOS`, a 5-bit mask of the level's
+  Jinjos (blue `0x01`, green `0x02`, orange `0x04`, pink `0x08`, yellow `0x10`: `1 << (marker id + 6)`,
+  which the CPU takes mod 32), with the Jinjo bar; at `0x1F` the fifth spawns the level's Jinjo jiggy (`10 *
+  level - 9`) beside itself as it flies off (`:184-200`). Nothing is saved: the mask is zeroed at every
+  level entry and on death (`itemscore_levelReset`, `src/core2/code_BEF20.c:221`, from `level_load`), and
+  a Jinjo has no test of its own, so it comes back on every visit.
+- **The layout** (`include/bkbt.h`; layout 0.10.0, `BKBT_AP_VERSION_MINOR` 10). A Jinjo's index is
+  `BKBT_AP_JINJO_INDEX(level, colour)`, `(level - 1) * 5 + colour`, the colour being the bit's number:
+  0..49, the Lair's row 25..29 never set. Items: `u8 jinjos[50]` at `+0x28`, not 0 = received, then 2
+  bytes of padding (92 bytes). Locations: `u8 jinjos[50]` at `+0x11C`, not 0 = picked up, then 2 bytes of
+  padding (336 bytes). The anchor stays 24 bytes. A client writes the Jinjos only to a ROM whose anchor says
+  0.10.0 or later (in 0.9.0 the items end at `+0x28`).
+- **The checks.** `bkbt_jinjos_checked[10]` (`src/core1/code_0.c`), a mask per level - 1 in the same bit
+  order, is the hack's record of the Jinjos picked up. While a file is chosen and Banjo is in one of the
+  nine levels (`bkbt_apJinjosActive`), the pickup sets its bit (`bkbt_apJinjoCheck`) instead of adding to
+  the mask, so `unk4` stays 0: no head, no Jinjo bar, no jiggy, and the plain Jinjo jingle; the spin, the
+  fly-off and the first Jinjo's text stay. A Jinjo whose bit is set despawns as it starts (`chJinjo_update`'s
+  init, after the parade's test), as a Mumbo token picked up does; that covers Mumbo's Mountain's hut Jinjo,
+  which vanishes as it comes out. The record is saved (`SaveData.jinjos_checked`, record `+0x8C`, "The save
+  device"): `saveData_create` writes it, `bkbt_saveData_loadAP` loads it with the chosen game, and
+  `clearScoreStates` zeroes it with the published bytes. `bkbt_apJinjos`, called from `bkbt_frame`,
+  publishes it into the locations on every main-loop iteration while `bkbt_file_chosen`.
+- **The items.** The level's mask follows the Jinjos received. At a level entry `level_load`
+  (`src/core2/code_9A740.c`), right after `itemscore_levelReset` zeroed it, calls `bkbt_apJinjosLevelEntry`,
+  which sets it to the level's received mask quietly (`item_adjustByDiff(..., TRUE)`): it runs before the
+  new map is set and outside the normal game mode, so it asks only for a chosen file and committed settings,
+  and it covers the reload after a death, where the level does not change. Then `bkbt_apJinjos` mirrors the
+  received mask into it on every main-loop iteration while items are allowed and Banjo is about in a Jinjo
+  level: a Jinjo that arrives shows the Jinjo bar with its head, as a pickup does in retail; one taken back
+  goes quietly. Outside a chosen file (demos) the Jinjos are retail's.
+- **The Jinjo jiggy.** `bkbt_apJinjoJiggy`, called at the end of the world update (`func_80332E08`,
+  `src/core2/code_ABC00.c`, where retail spawns the witch switches' jiggies), spawns the level's Jinjo
+  jiggy with retail's `jiggy_spawn` at Banjo's position and 50 up, where the fifth Jinjo would have, once the
+  received mask is `0x1F`, while the jiggy is not spawned this visit nor collected (`jiggyscore_isSpawned`),
+  and only while Banjo stands, in control, alive, with no text, transition, minigame or parade going on. Not
+  from `bkbt_frame`: that runs before the world update, and a map change later in the same iteration would
+  free the queued jiggy. `jiggy_spawn` marks the jiggy spawned until the next level entry
+  (`jiggyscore_clearAllSpawned` in `level_load`), so it comes once a visit: right away when the fifth
+  arrives in the level, otherwise at the next entry; a jiggy left behind stays in its map (the actor is in
+  the map's savestate) and comes again at the next entry or after a death. **It is taken where it
+  appears.** The jiggy list throws every jiggy it spawns (a bundle: Mumbo's Mountain's Jinjo jiggy is bundle
+  7, 1000 up, the other levels' bundle `0x10`, 100 up; `src/core2/code_41FB0.c`, `gBundle_array`), and a
+  bundle in flight cannot be picked up until it has landed or flown 1.2 s (`func_802C9C14`,
+  `src/core2/ba/marker.c:265`). So it came down where Banjo had stood; at a level's entry that is the warp
+  back to the Lair, and in the owner's hand test on ares v148 (2026-10-29) going back for it took him out
+  of the level as he took it. Now `func_803333DC` (`src/core2/code_ABC00.c`), where every jiggy of the list
+  gets its actor, asks `bkbt_apIsJinjoJiggy` (the level's Jinjo jiggy while `bkbt_apJinjosActive`, when
+  only the hack spawns it) and has `bkbt_bundle_holdCollectable` (`src/core2/code_41FB0.c`) hold it: the
+  bundle idle where it appears, and collectable at once. It appears on Banjo, standing or walking, so he
+  takes it on the frame it appears.
+- **Two fixes for the hack's sake.** `src/RBB/ch/bellbuoy.c`: the buoy takes the marker of the Jinjo within
+  300 units of it at its second update; should that Jinjo despawn as checked after the buoy took it, the
+  marker would lead to another actor, so the buoy lets it go. `src/core2/code_BEF20.c`:
+  `item_adjustByDiffWithHud` returns its value, which retail's callers read from `v0` by accident.
+- **For the tools.** `bkbt_jinjos_checked` is a global in the map (no `bkbt_ptr_*` needed). The BKBT
+  repository's Jinjo check (`tools/bk_jinjo_check.py`) plants games with Jinjos checked, puts Banjo onto
+  Mumbo's Mountain's Jinjos and reads the mask, the Jinjo bar, the jiggy's bits and its entry in
+  `jiggylist_list` and the Jinjo actors; the anchor check wants 0.10.0; the seed check reads the 336 bytes
+  and plants Jinjos; the hand client sends and prints them; the client check plays the client's own code
+  with Jinjos; every tool that plants or reads saves knows the `0xA0` record (`tools/bk_eeprom.py`).
+- **What it costs.** 1,856 bytes of RAM headroom (lair ends at `0x80395FF0`, `lair_VRAM_END`; the structs,
+  the record's buffer and the code; 128 of them the hold of the jiggy) and 672 of ROM room (21,872 bytes
+  before the last 128 KiB, by the image builder's count).
+- **Known limits.** Banjo takes the jiggy at once where it appears: the player sees the jiggy dance more
+  than the jiggy. Treasure Trove Cove's
+  plays no spawn jingle (`jiggy_spawn` skips it for `JIGGY_0B_TTC_JINJO`, as in retail). If the spawn queue
+  is full (15 entries, `src/core2/spawnqueue.c`), that visit gets no jiggy. The reloads of Bottles' Bonus, the
+  parade and the ending drop the Jinjos checked since the last save, as for the molehills: the Jinjo comes
+  back, and the server already has the check.
+
+Checked on mupen64plus on 2026-10-29 with the BKBT repository's Jinjo check (`counts`, `delivered`,
+`decreased`, `jiggy`, `entry`, `collected`, `picked`, `remembered`, `despawned`, on the ROM by itself and on
+the autotest image), the seed check with Jinjos planted, the client check and the save check on the `0xA0`
+record (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). The owner tried that build by hand on ares
+v148 on 2026-10-29 with the client and a server: everything passed but the thrown jiggy ("The Jinjo jiggy"
+above). The hold that followed was checked on mupen64plus only: the Jinjo check's jiggy runs, standing and
+with Banjo walking (`--walk`), and the whole matrix again, 217 runs. Not checked: a console, the levels
+other than Mumbo's Mountain, the bell buoy, the hold by hand.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1445,13 +1557,14 @@ battle itself (the checks plant the flag or set it), any emulator by hand.
   settings of 2026-10-18, 65,888 with the Archipelago items of that day, 65,792 with the molehills as
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
-  2026-10-27, 66,768 with the Mumbo tokens of that day and 66,464 with the note doors of that day: the
-  largest, lair, ends at
+  2026-10-27, 66,768 with the Mumbo tokens of that day, 66,464 with the note doors of that day, 66,384
+  with the goal of 2026-10-28 and 64,528 with the Jinjos of 2026-10-29: the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
   the molehills, at `0x80395170` in that of the save in SRAM, at `0x80395350` in that of the
-  honeycombs, at `0x80395590` in that of the jiggies, at `0x80395730` in that of the tokens and at
-  `0x80395860` in that of the note doors, read as `lair_VRAM_END`). Every level overlay is
+  honeycombs, at `0x80395590` in that of the jiggies, at `0x80395730` in that of the tokens, at
+  `0x80395860` in that of the note doors, at `0x803958B0` in that of the goal and at `0x80395FF0` in that
+  of the Jinjos, read as `lair_VRAM_END`). Every level overlay is
   loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from

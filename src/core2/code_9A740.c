@@ -1,6 +1,9 @@
 #include <ultra64.h>
 #include "functions.h"
 #include "variables.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void rbb_propellorCtrl_stop(void); //rbb
 
@@ -37,6 +40,10 @@ void level_load(enum map_e map){
     
         mapSavestate_init();
         itemscore_levelReset(sLevelState.level);
+#if BKBT
+        /* The level's Jinjos are the ones the client has sent, from the entry on (src/core1/code_0.c) */
+        bkbt_apJinjosLevelEntry(sLevelState.level);
+#endif
         jiggyscore_clearAllSpawned();
         levelSpecificFlags_clear();
         bsStoredState_clearTimers();

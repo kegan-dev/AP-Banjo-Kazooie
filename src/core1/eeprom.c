@@ -29,6 +29,12 @@
  * Main thread only, like every caller of the two functions at the end of this file: one request, one
  * queue and one buffer serve all transfers, and each call waits until its transfer is done. */
 #define BKBT_SRAM_BYTES (s32)(sizeof(SaveData) * 4 + sizeof(GlobalData)) /* 4 game records and the global one; s32, so that the range check below is signed */
+/* The link checks that 0x2A0 bytes from bkbt_sram_offset on fit the SRAM (manual_syms.us.v10.txt), and the
+ * tools know a record of 0xA0 bytes (tools/bk_eeprom.py of the BKBT repository): stop a build whose
+ * records add up to anything else, or whose record is not a whole number of EEPROM blocks, the unit of
+ * the game's transfers. IDO has no _Static_assert; an array of size -1 does not compile. */
+typedef char bkbt_sram_size_check[(sizeof(SaveData) == 0xA0 && BKBT_SRAM_BYTES == 0x2A0
+                                   && sizeof(SaveData) % EEPROM_BLOCK_SIZE == 0) ? 1 : -1];
 static OSPiHandle sBkbtSramHandle; /* which device: the SRAM */
 static OSIoMesg sBkbtSramIoMesg;   /* the request sent to the PI manager */
 static OSMesgQueue sBkbtSramQueue; /* where the manager replies */

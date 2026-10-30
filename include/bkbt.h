@@ -101,7 +101,8 @@ const BkbtApSettings *bkbt_apSettings(void); /* src/core1/code_0.c: the settings
 bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once the client has written the settings since boot */
 
 /* The items the player has received (hack feature 3: the moves since layout 0.3.0, the empty honeycombs
- * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors since 0.8.0). The client writes them and this
+ * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors since 0.8.0, the
+ * Jinjos since 0.10.0). The client writes them and this
  * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
  * nothing new. The seed commits these as well: the client writes the settings and the items first and
  * the seed last, and starts from seed 0 to change them in a running game. Every boot starts them at 0,
@@ -117,6 +118,17 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
  * instead of at a note total; the total reaching a door's cost is a location (below). */
 #define BKBT_AP_NOTE_DOORS 12
 #define BKBT_AP_NOTE_DOOR_SLOTS 13 /* indexed by the door's selector, 1..12; [0] is never set */
+/* The Jinjos, one item and one location per level and colour (since 0.10.0). A Jinjo is known only by
+ * its colour and the level it is in (src/core2/ch/jinjo.c): the colour is its marker id less
+ * MARKER_5A_JINJO_BLUE (include/enums.h), which is also its bit in the game's mask of the level's Jinjos,
+ * ITEM_12_JINJOS (blue 0x01, green 0x02, orange 0x04, pink 0x08, yellow 0x10: jinjo.c shifts 1 by the
+ * marker id + 6, which the CPU takes mod 32). Levels 1..0xA by enum level_e (include/enums.h): the nine
+ * levels with Jinjos and the Lair (6), whose row is never set. */
+#define BKBT_AP_JINJO_COLOURS 5
+#define BKBT_AP_JINJO_LEVELS 10    /* enum level_e 1..0xA, by level - 1 */
+#define BKBT_AP_JINJO_SLOTS 50     /* BKBT_AP_JINJO_INDEX(level, colour), 0..49; 25..29 (the Lair) never set */
+#define BKBT_AP_JINJO_INDEX(level, colour) (((level) - 1) * BKBT_AP_JINJO_COLOURS + (colour))
+#define BKBT_AP_JINJO_ALL 0x1F     /* the five colours' bits: the level's Jinjo jiggy */
 
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
@@ -126,7 +138,9 @@ typedef struct {
     u8 padding;                   /* +0x17: 0. Left free, so that the note doors start on a word */
     u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x18: indexed by the note door's selector; not 0 = received (since 0.8.0) */
     u8 padding2[3];               /* +0x25: 0. Named, so that the room left for the next field is visible */
-} BkbtApItems;                    /* 40 bytes since 0.8.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0) */
+    u8 jinjos[BKBT_AP_JINJO_SLOTS]; /* +0x28: indexed by BKBT_AP_JINJO_INDEX; not 0 = received (since 0.10.0) */
+    u8 padding3[2];               /* +0x5A: 0 */
+} BkbtApItems;                    /* 92 bytes since 0.10.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0, 40 in 0.8.0 and 0.9.0) */
 
 extern BkbtApItems bkbt_ap_items;
 
@@ -156,7 +170,13 @@ extern BkbtApItems bkbt_ap_items;
  *
  * Gruntilda beaten, the Archipelago goal (since 0.9.0): a copy of the game's own saved flag
  * FILEPROG_FC_DEFEAT_GRUNTY, which the final battle sets (src/fight/chfinalboss.c), made on every
- * main-loop iteration while bkbt_file_chosen, like the copies above. */
+ * main-loop iteration while bkbt_file_chosen, like the copies above.
+ *
+ * The Jinjos (since 0.10.0): a Jinjo picked up sets its byte instead of the level's mask, so it gives
+ * nothing by itself; its item comes from the client like any other. The game keeps no record of the
+ * Jinjos (its mask lasts one level visit), so the hack keeps one, bkbt_jinjos_checked, saved with the
+ * game (SaveData.jinjos_checked, include/save.h) like the molehills, and a checked Jinjo no longer
+ * spawns. Published from it on every main-loop iteration while bkbt_file_chosen. */
 #define BKBT_AP_HONEYCOMB_SLOTS 0x19 /* indexed by enum honeycomb_e, 1..0x18; [0] is never set (HONEYCOMB_COUNT in src/core2/honeycombscore.c) */
 #define BKBT_AP_JIGGY_SLOTS 0x65 /* indexed by enum jiggy_e, 1..0x64; [0] is never set (include/enums.h) */
 #define BKBT_AP_TOKEN_SLOTS 0x74 /* indexed by enum mumbotoken_e, 1..0x73; [0] is never set (include/enums.h) */
@@ -171,7 +191,9 @@ typedef struct {
     u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x10C: indexed by the note door's selector; not 0 = its threshold reached (since 0.8.0) */
     u8 gruntilda_beaten;            /* +0x119: not 0 = FILEPROG_FC_DEFEAT_GRUNTY set, the goal (since 0.9.0; padding before) */
     u8 padding3[2];                 /* +0x11A: 0 */
-} BkbtApLocations;                  /* 284 bytes since 0.8.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0) */
+    u8 jinjos[BKBT_AP_JINJO_SLOTS]; /* +0x11C: indexed by BKBT_AP_JINJO_INDEX; not 0 = picked up (since 0.10.0) */
+    u8 padding4[2];                 /* +0x14E: 0 */
+} BkbtApLocations;                  /* 336 bytes since 0.10.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0, 284 in 0.8.0 and 0.9.0) */
 
 extern BkbtApLocations bkbt_ap_locations;
 
@@ -208,6 +230,31 @@ extern s16 bkbt_note_door_costs[BKBT_AP_NOTE_DOORS];
  * apply; the door actor opens on this instead of on a note total (src/lair/lairspawnqueue.c). */
 bool bkbt_apNoteDoorReceived(s32 door);
 
+/* src/core1/code_0.c: the Jinjos picked up in the chosen game, one mask of the colours' bits per level
+ * (by level - 1, BKBT_AP_JINJO_LEVELS). The game keeps no such record, so the hack does: saved with the
+ * game (SaveData.jinjos_checked, include/save.h), loaded with the chosen game (bkbt_saveData_loadAP),
+ * zeroed by clearScoreStates. A Jinjo whose bit is set does not spawn (src/core2/ch/jinjo.c). */
+extern u8 bkbt_jinjos_checked[BKBT_AP_JINJO_LEVELS];
+
+/* src/core1/code_0.c: the Jinjos, for src/core2/ch/jinjo.c and the level and world updates.
+ * bkbt_apJinjosActive: TRUE while the chosen game is in play in a level with Jinjos; the Jinjos are
+ * Archipelago's then, and retail's otherwise (demos). bkbt_apJinjoChecked/bkbt_apJinjoCheck: read and set
+ * the Jinjo of `colour` (0..4) in `level`. bkbt_apJinjosLevelEntry: sets the level's mask to the Jinjos
+ * received, quietly, after level_load has zeroed it (src/core2/code_9A740.c). bkbt_apJinjoJiggy: spawns
+ * the level's Jinjo jiggy on Banjo once its five Jinjos are received (src/core2/code_ABC00.c). */
+bool bkbt_apJinjosActive(s32 level);
+bool bkbt_apJinjoChecked(s32 level, s32 colour);
+void bkbt_apJinjoCheck(s32 level, s32 colour);
+void bkbt_apJinjosLevelEntry(s32 level);
+void bkbt_apJinjoJiggy(void);
+
+/* src/core1/code_0.c: TRUE for the level's Jinjo jiggy while bkbt_apJinjosActive, when bkbt_apJinjoJiggy is
+ * its only spawner. src/core2/code_ABC00.c asks as a jiggy spawns, and src/core2/code_41FB0.c holds this one
+ * where it appears, collectable at once (bkbt_bundle_holdCollectable): Banjo takes it there. */
+bool bkbt_apIsJinjoJiggy(s32 jiggy);
+struct actor_s;
+void bkbt_bundle_holdCollectable(struct actor_s *actor);
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -221,7 +268,7 @@ bool bkbt_apNoteDoorReceived(s32 door);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 9
+#define BKBT_AP_VERSION_MINOR 10
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -238,8 +285,8 @@ typedef struct {
     u8 version_minor;           /* +0x0A */
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
-    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0) */
-    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0) */
+    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0, 92 since 0.10.0) */
+    BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0, 336 since 0.10.0) */
 } BkbtApAnchor;                 /* 24 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;

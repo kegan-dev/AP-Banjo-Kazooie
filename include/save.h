@@ -11,7 +11,7 @@ typedef struct{
 #if BKBT
     /* Retail's padding, never written by retail: the jiggies and the Mumbo tokens received that this game
      * had given when it was saved (bkbt_jiggies_given, bkbt_tokens_given), each saved in the same record
-     * as the held count it went into. The last of the padding: another such count needs a bigger record */
+     * as the held count it went into. The last of retail's padding */
     u8 jiggies_given;
     u8 tokens_given;
 #else
@@ -19,10 +19,14 @@ typedef struct{
 #endif
 #if BKBT
     /* The seed the game is bound to and its checked locations (bkbt_ap_locations), saved with it */
-    u32 seed;
-    u8 move_locations[BKBT_AP_MOVE_COUNT];
+    u32 seed;                               /* +0x74 */
+    u8 move_locations[BKBT_AP_MOVE_COUNT];  /* +0x78 */
+    /* The Jinjos picked up (bkbt_jinjos_checked), one mask per level, since the Jinjos' build: the
+     * record grew from 0x90 to 0xA0 bytes for them */
+    u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]; /* +0x8C */
+    u8 spare[6];                            /* +0x96: 0. Named, so that the room left for the hack is visible */
 #endif
-    u32 checksum;
+    u32 checksum;                           /* the last word: +0x9C in the hack build, +0x74 in retail */
 }SaveData;
 
 typedef struct {
