@@ -402,6 +402,10 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
     for (i = 0; i < BKBT_AP_JINJO_LEVELS; i++) {
         bkbt_jinjos_checked[i] = saveData->jinjos_checked[i];
     }
+    /* The notes picked up, which the game keeps for one level visit only */
+    for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
+        bkbt_notes_collected[i] = saveData->notes_collected[i];
+    }
 }
 #endif
 
@@ -431,6 +435,9 @@ void saveData_create(SaveData *savedata){
     savedata->tokens_given = bkbt_tokens_given;
     for (i = 0; i < BKBT_AP_JINJO_LEVELS; i++) {
         savedata->jinjos_checked[i] = bkbt_jinjos_checked[i];
+    }
+    for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
+        savedata->notes_collected[i] = bkbt_notes_collected[i];
     }
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));

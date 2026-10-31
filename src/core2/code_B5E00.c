@@ -141,6 +141,8 @@ void bkbt_gameFile_loadAP(s32 gamenum) {
      * the health of what was received rather than of what was picked up. */
     bkbt_file_chosen = TRUE;
     func_80347958();
+    /* The levels' note counts are the notes kept, now that the record's bests are loaded too */
+    bkbt_apNotesLoaded();
 }
 #endif
 

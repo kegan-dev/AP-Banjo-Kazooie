@@ -6,6 +6,9 @@
 #include <core2/file.h>
 #include "math.h"
 #include "prop.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void mapModel_getCubeBounds(s32 min[3], s32 max[3]);
 extern f32 func_803243D0(struct56s *arg0, f32 arg1[3]);
@@ -932,6 +935,10 @@ void cubeList_fromFile(File *file_ptr) {
     Cube *cube;
     NodeProp *iPtr;
 
+#if BKBT
+    /* The notes are numbered as this setup's props are read (src/core1/code_0.c) */
+    bkbt_notesSetupBegin();
+#endif
     // Gets the dimensions of the cubes
     file_getNWords_ifExpected(file_ptr, CUBE_DIMENSIONS_START_INDICATOR, cube_position_from, 3);
     file_getNWords(file_ptr, cube_position_to, 3);
@@ -945,6 +952,9 @@ void cubeList_fromFile(File *file_ptr) {
         }
     }
 
+#if BKBT
+    bkbt_notesSetupEnd();
+#endif
     // Checks to make sure cube section ends correctly
     file_isNextByteExpected(file_ptr, CUBE_SECTION_END_INDICATOR);
 

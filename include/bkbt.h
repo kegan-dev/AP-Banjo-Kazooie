@@ -88,7 +88,9 @@ typedef struct {
 typedef struct {
     u32 seed;       /* +0x00: the generated game's seed; written last; 0 = not written since this boot */
     u8 skip_intro;  /* +0x04: 1 = a new game skips the intro, 0 = it plays it */
-    u8 padding[3];  /* +0x05: 0. Named, so that the size the u32 rounds the struct up to is visible */
+    u8 notesanity;  /* +0x05: 1 = the notes are Archipelago items: a note picked up is only a check, and the
+                     * game's note totals are the Notes received (since 0.11.0; latched when a game is chosen) */
+    u8 padding[2];  /* +0x06: 0. Named, so that the size the u32 rounds the struct up to is visible */
 } BkbtApSettings;   /* 8 bytes */
 
 extern BkbtApSettings bkbt_ap_settings;
@@ -102,7 +104,7 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 
 /* The items the player has received (hack feature 3: the moves since layout 0.3.0, the empty honeycombs
  * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors since 0.8.0, the
- * Jinjos since 0.10.0). The client writes them and this
+ * Jinjos since 0.10.0, the Notes since 0.11.0). The client writes them and this
  * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
  * nothing new. The seed commits these as well: the client writes the settings and the items first and
  * the seed last, and starts from seed 0 to change them in a running game. Every boot starts them at 0,
@@ -129,6 +131,17 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 #define BKBT_AP_JINJO_SLOTS 50     /* BKBT_AP_JINJO_INDEX(level, colour), 0..49; 25..29 (the Lair) never set */
 #define BKBT_AP_JINJO_INDEX(level, colour) (((level) - 1) * BKBT_AP_JINJO_COLOURS + (colour))
 #define BKBT_AP_JINJO_ALL 0x1F     /* the five colours' bits: the level's Jinjo jiggy */
+/* The notes (since 0.11.0): 100 in each of the nine levels, numbered BKBT_AP_NOTE_INDEX(level, n), n 0..99
+ * within the level: the level's maps by map id, each map's note sprites in the order the game reads them
+ * from its setup (src/core2/code_A5BC0.c; the table in src/core1/code_0.c), then the five a hut drops in
+ * Mumbo's Mountain and Bubblegloop Swamp (n 95..99, BKBT_AP_HUT_NOTE_FIRST). 0..999, the Lair's 500..599
+ * never set. One bit each, byte index >> 3, bit index & 7, in the save and in the locations alike. */
+#define BKBT_AP_NOTES_PER_LEVEL 100
+#define BKBT_AP_NOTE_SLOTS 1000    /* BKBT_AP_NOTE_INDEX(level, n), levels 1..0xA */
+#define BKBT_AP_NOTE_BYTES 125     /* BKBT_AP_NOTE_SLOTS bits */
+#define BKBT_AP_NOTE_INDEX(level, n) (((level) - 1) * BKBT_AP_NOTES_PER_LEVEL + (n))
+#define BKBT_AP_HUT_NOTE_FIRST 95  /* n of the first of a hut's five notes, in levels 1 and 4 */
+#define BKBT_AP_NOTE_MAX 900       /* Notes received: more reads as this */
 
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
@@ -139,7 +152,8 @@ typedef struct {
     u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]; /* +0x18: indexed by the note door's selector; not 0 = received (since 0.8.0) */
     u8 padding2[3];               /* +0x25: 0. Named, so that the room left for the next field is visible */
     u8 jinjos[BKBT_AP_JINJO_SLOTS]; /* +0x28: indexed by BKBT_AP_JINJO_INDEX; not 0 = received (since 0.10.0) */
-    u8 padding3[2];               /* +0x5A: 0 */
+    u16 notes;                    /* +0x5A: Notes received; more than BKBT_AP_NOTE_MAX reads as that (since 0.11.0;
+                                   * the game reads it only with notesanity) */
 } BkbtApItems;                    /* 92 bytes since 0.10.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0, 40 in 0.8.0 and 0.9.0) */
 
 extern BkbtApItems bkbt_ap_items;
@@ -176,7 +190,13 @@ extern BkbtApItems bkbt_ap_items;
  * nothing by itself; its item comes from the client like any other. The game keeps no record of the
  * Jinjos (its mask lasts one level visit), so the hack keeps one, bkbt_jinjos_checked, saved with the
  * game (SaveData.jinjos_checked, include/save.h) like the molehills, and a checked Jinjo no longer
- * spawns. Published from it on every main-loop iteration while bkbt_file_chosen. */
+ * spawns. Published from it on every main-loop iteration while bkbt_file_chosen.
+ *
+ * The notes (since 0.11.0): a bit per note number (BKBT_AP_NOTE_INDEX), set when the note is picked up.
+ * The game keeps the notes of one level visit only, so the hack keeps every note picked up,
+ * bkbt_notes_collected, saved with the game (SaveData.notes_collected), and a note kept no longer
+ * appears; with or without notesanity. Published from it on every main-loop iteration while
+ * bkbt_file_chosen. With notesanity the note doors' thresholds above count the Notes received. */
 #define BKBT_AP_HONEYCOMB_SLOTS 0x19 /* indexed by enum honeycomb_e, 1..0x18; [0] is never set (HONEYCOMB_COUNT in src/core2/honeycombscore.c) */
 #define BKBT_AP_JIGGY_SLOTS 0x65 /* indexed by enum jiggy_e, 1..0x64; [0] is never set (include/enums.h) */
 #define BKBT_AP_TOKEN_SLOTS 0x74 /* indexed by enum mumbotoken_e, 1..0x73; [0] is never set (include/enums.h) */
@@ -193,7 +213,9 @@ typedef struct {
     u8 padding3[2];                 /* +0x11A: 0 */
     u8 jinjos[BKBT_AP_JINJO_SLOTS]; /* +0x11C: indexed by BKBT_AP_JINJO_INDEX; not 0 = picked up (since 0.10.0) */
     u8 padding4[2];                 /* +0x14E: 0 */
-} BkbtApLocations;                  /* 336 bytes since 0.10.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0, 284 in 0.8.0 and 0.9.0) */
+    u8 notes[BKBT_AP_NOTE_BYTES];   /* +0x150: a bit per BKBT_AP_NOTE_INDEX; set = picked up (since 0.11.0) */
+    u8 padding5[3];                 /* +0x1CD: 0 */
+} BkbtApLocations;                  /* 464 bytes since 0.11.0 (48 in 0.5.0, 152 in 0.6.0, 268 in 0.7.0, 284 in 0.8.0 and 0.9.0, 336 in 0.10.0) */
 
 extern BkbtApLocations bkbt_ap_locations;
 
@@ -255,6 +277,33 @@ bool bkbt_apIsJinjoJiggy(s32 jiggy);
 struct actor_s;
 void bkbt_bundle_holdCollectable(struct actor_s *actor);
 
+/* src/core1/code_0.c: the notes picked up in the chosen game, a bit per BKBT_AP_NOTE_INDEX. The game keeps
+ * those of one level visit only, so the hack does: saved with the game (SaveData.notes_collected,
+ * include/save.h), loaded with the chosen game (bkbt_saveData_loadAP), zeroed by clearScoreStates. A note
+ * whose bit is set does not appear (bkbt_notesSetupNote). */
+extern u8 bkbt_notes_collected[BKBT_AP_NOTE_BYTES];
+
+/* src/core1/code_0.c: the notes, for the setup read (src/core2/gccube.c, src/core2/code_A5BC0.c), the
+ * pickups (src/core2/ba/marker.c), the huts' drop (src/core2/code_41FB0.c), the level entry
+ * (src/core2/code_9A740.c), the load (src/core2/code_B5E00.c) and the counts (src/core2/code_BEF20.c).
+ * bkbt_notesSetupBegin/bkbt_notesSetupNote/bkbt_notesSetupEnd: number the map's notes as its setup is read;
+ * TRUE for a note the chosen game has kept, which is to stay hidden. bkbt_apNotePicked (a placed note, by
+ * position) and bkbt_apHutNotePicked: keep the note; TRUE when the game is to count it as retail does.
+ * bkbt_apHutNotesLeft: how many of a hut's `count` notes to drop. bkbt_apNotesLevelEntry: the level's count
+ * starts at its notes kept. bkbt_apNotesLoaded: after the chosen game is loaded. bkbt_apNotesTotal: the
+ * note total the game shows and the thresholds read. bkbt_apNotesKept: TRUE while notes are kept, when the
+ * game's "a new best" texts mean nothing. */
+void bkbt_notesSetupBegin(void);
+bool bkbt_notesSetupNote(s16 position[3]);
+void bkbt_notesSetupEnd(void);
+bool bkbt_apNotePicked(s16 position[3]);
+bool bkbt_apHutNotePicked(void);
+s32 bkbt_apHutNotesLeft(s32 count);
+void bkbt_apNotesLevelEntry(s32 level);
+void bkbt_apNotesLoaded(void);
+s32 bkbt_apNotesTotal(s32 total);
+bool bkbt_apNotesKept(void);
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -268,7 +317,7 @@ void bkbt_bundle_holdCollectable(struct actor_s *actor);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 10
+#define BKBT_AP_VERSION_MINOR 11
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything

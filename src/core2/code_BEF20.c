@@ -419,6 +419,11 @@ void itemscore_noteScores_update(s32 note_count) {
             if (note_count == 1) {
                 levelSpecificFlags_set(LEVEL_FLAG_34_UNKNOWN, TRUE);
             }
+#if BKBT
+            /* While the notes are kept (src/core1/code_0.c) every visit that picks up a note beats the best:
+             * no "a new best" text, and none on leaving the level */
+            if (!bkbt_apNotesKept()) {
+#endif
             if (!levelSpecificFlags_get(LEVEL_FLAG_34_UNKNOWN) && (gcdialog_showDialog(VER_SELECT(0xF76, 0xADC, 0, 0), 0, NULL, NULL, NULL, NULL))) {
                 levelSpecificFlags_set(LEVEL_FLAG_34_UNKNOWN, TRUE);
             }
@@ -426,6 +431,9 @@ void itemscore_noteScores_update(s32 note_count) {
                 volatileFlag_set(VOLATILE_FLAG_17, 1);
                 volatileFlag_setN(VOLATILE_FLAG_19_CURRENT_LEVEL_ID, level_id, 4);
             }
+#if BKBT
+            }
+#endif
         }
     }
 }
@@ -436,7 +444,12 @@ s32 itemscore_noteScores_getTotal(void){
     do{
         total += sItemscoreNoteScores[i++];
     }while(i < 0xe);
+#if BKBT
+    /* With notesanity, the Notes received (src/core1/code_0.c) */
+    return bkbt_apNotesTotal(total);
+#else
     return total;
+#endif
 }
 
 s32 itemscore_noteScores_get(enum level_e lvl_id){

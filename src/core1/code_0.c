@@ -166,7 +166,8 @@ static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the 
 BkbtApSettings bkbt_ap_settings = {
     0,
     0,
-    {0, 0, 0}
+    0,
+    {0, 0}
 };
 
 u32 bkbt_file_seed = 0;
@@ -184,7 +185,8 @@ bool bkbt_apSettingsCommitted(void) {
 static const BkbtApSettings sBkbtApDefaults = {
     0,
     TRUE,
-    {0, 0, 0}
+    FALSE,
+    {0, 0}
 };
 
 /* The settings the game plays by: the client's once committed, the defaults until then. Game code reads
@@ -260,6 +262,8 @@ int jiggyscore_isSpawned(enum jiggy_e jiggy_id); /* src/core2/jiggyscore.c: spaw
 bool player_isStable(void);              /* src/core2/playerutils.c: Banjo stands on the ground */
 int gcdialog_hasCurrentTextId(void);     /* src/core2/gc/dialog.c: a text is on the screen */
 int gctransition_done(void);             /* src/core2/gc/transition.c: no map transition is running */
+bool func_802E4A08(void);                /* src/core2/code_5C870.c: the game plays back recorded input (demos) */
+extern u8 sItemscoreNoteScores[];        /* src/core2/code_BEF20.c: each level's note count, by enum level_e */
 
 static bool bkbt_apItemsAllowed(void) {
     enum map_e map;
@@ -577,6 +581,271 @@ bool bkbt_apIsJinjoJiggy(s32 jiggy) {
     return bkbt_apJinjosActive(level) && jiggy == 10 * level - 9;
 }
 
+/* The notes (include/bkbt.h): every note picked up in the chosen game, one bit per note number, saved with
+ * the game. Initialised data, a global for the save code and the map. */
+u8 bkbt_notes_collected[BKBT_AP_NOTE_BYTES] = {0};
+
+/* The maps with notes, by level and map id: the map (enum map_e), its level (enum level_e), the number n
+ * of its first note in the level and its count of note sprites, which the game reads from the map's setup
+ * in the order of their numbers. Written from the retail ROM's setups by tools/bk_notes.py of the BKBT
+ * repository, which checks it against them (--hack): 100 notes a level, the huts' five of Mumbo's
+ * Mountain and Bubblegloop Swamp after their placed 95. */
+typedef struct {
+    u8 map;
+    u8 level;
+    u8 first;
+    u8 count;
+} BkbtNoteMap;
+
+static const BkbtNoteMap sBkbtNoteMaps[] = {
+    /* BKBT notes table: begin (tools/bk_notes.py --hack reads and checks the rows between these two lines) */
+    {0x02, 1, 0, 85}, {0x0C, 1, 85, 6}, {0x0E, 1, 91, 4}, {0x05, 2, 0, 8}, {0x06, 2, 8, 6}, {0x07, 2, 14, 82},
+    {0x0A, 2, 96, 4}, {0x0B, 3, 0, 72}, {0x21, 3, 72, 6}, {0x22, 3, 78, 16}, {0x23, 3, 94, 6}, {0x0D, 4, 0, 83},
+    {0x10, 4, 83, 6}, {0x11, 4, 89, 6}, {0x27, 5, 0, 82}, {0x48, 5, 82, 6}, {0x53, 5, 88, 12}, {0x12, 7, 0, 70},
+    {0x13, 7, 70, 4}, {0x14, 7, 74, 7}, {0x15, 7, 81, 4}, {0x16, 7, 85, 8}, {0x1A, 7, 93, 7}, {0x40, 8, 0, 4},
+    {0x43, 8, 4, 16}, {0x44, 8, 20, 16}, {0x45, 8, 36, 37}, {0x46, 8, 73, 16}, {0x4C, 8, 89, 4}, {0x5C, 8, 93, 4},
+    {0x60, 8, 97, 3}, {0x31, 9, 0, 43}, {0x34, 9, 43, 16}, {0x35, 9, 59, 4}, {0x37, 9, 63, 8}, {0x38, 9, 71, 4},
+    {0x39, 9, 75, 4}, {0x3B, 9, 79, 5}, {0x3C, 9, 84, 5}, {0x3D, 9, 89, 4}, {0x3F, 9, 93, 3}, {0x8B, 9, 96, 4},
+    {0x1B, 10, 0, 47}, {0x1C, 10, 47, 10}, {0x1D, 10, 57, 4}, {0x24, 10, 61, 4}, {0x25, 10, 65, 7}, {0x26, 10, 72, 8},
+    {0x29, 10, 80, 9}, {0x2D, 10, 89, 4}, {0x2F, 10, 93, 5}, {0x30, 10, 98, 2},
+    /* BKBT notes table: end */
+};
+#define BKBT_NOTE_MAPS (s32)(sizeof(sBkbtNoteMaps) / sizeof(sBkbtNoteMaps[0]))
+#define BKBT_NOTES_IN_A_MAP 100 /* room for the notes of one map: the most is 85, Mumbo's Mountain's 0x02 */
+
+/* The notes of the map whose setup was read last (bkbt_notesSetupBegin), by number: their positions, the
+ * same s16s the pickup sees (the setup's, include/prop.h), and the table's entry for the map, -1 when it has
+ * no notes or its setup did not hold the table's count. sBkbtNotePos is set before it is read. */
+static s32 sBkbtNoteMapIx = -1;
+static s32 sBkbtNoteMap = -1;
+static s32 sBkbtNotesRead = 0;
+static s16 sBkbtNotePos[BKBT_NOTES_IN_A_MAP][3];
+
+/* The chosen game's notesanity, latched when it is chosen (bkbt_apNotesLoaded): the client writes seed 0
+ * before it changes anything, and the defaults say no notesanity. And the Notes received, taken only while
+ * the settings are committed (the client writes the u16 a byte at a time), kept in between: a note door's
+ * threshold, once published, cannot be taken back. */
+static bool sBkbtNotesanity = FALSE;
+static s32 sBkbtNotesReceived = 0;
+
+/* Notes picked up that the chosen game had kept already. A note kept is hidden at the setup read and a hut
+ * drops only the notes not kept, so this stays 0: for the tools, which read it as the proof that a note kept
+ * is not there to pick up. A global, so that the map carries it. */
+u32 bkbt_notes_picked_again = 0;
+
+static bool bkbt_noteKept(s32 index) {
+    return (bkbt_notes_collected[index >> 3] >> (index & 7)) & 1;
+}
+
+static void bkbt_noteKeep(s32 index) {
+    bkbt_notes_collected[index >> 3] |= 1 << (index & 7);
+}
+
+/* The notes kept in `level`, one of the nine (bkbt_jinjoLevel). */
+static s32 bkbt_notesInLevel(s32 level) {
+    s32 n;
+    s32 count = 0;
+
+    for (n = 0; n < BKBT_AP_NOTES_PER_LEVEL; n++) {
+        count += bkbt_noteKept(BKBT_AP_NOTE_INDEX(level, n));
+    }
+    return count;
+}
+
+/* While the chosen game is in play: not a demo, Bottles' Bonus, a picture or the parade, which all load
+ * after clearScoreStates, nor the playback of recorded input. */
+static bool bkbt_apNotesActive(void) {
+    return bkbt_file_chosen && !func_802E4A08();
+}
+
+/* The levels whose first hut smashed drops five notes (src/MM/ch/hut.c, src/BGS/ch/mudhut.c). */
+static bool bkbt_hutLevel(s32 level) {
+    return level == LEVEL_1_MUMBOS_MOUNTAIN || level == LEVEL_4_BUBBLEGLOOP_SWAMP;
+}
+
+/* At the start of every setup read (cubeList_fromFile, src/core2/gccube.c), for the map just set. */
+void bkbt_notesSetupBegin(void) {
+    s32 i;
+
+    sBkbtNoteMap = gsworld_getMap();
+    sBkbtNoteMapIx = -1;
+    sBkbtNotesRead = 0;
+    for (i = 0; i < BKBT_NOTE_MAPS; i++) {
+        if (sBkbtNoteMaps[i].map == sBkbtNoteMap) {
+            sBkbtNoteMapIx = i;
+            break;
+        }
+    }
+}
+
+/* Each note sprite the setup read meets (code7AF80_initCubeFromFile, src/core2/code_A5BC0.c), in its
+ * order: the next number. TRUE for a note the chosen game has kept, which the caller hides. Only ever
+ * hides: the game shows every prop of a setup it reads, and hides the notes itself in Furnace Fun. */
+bool bkbt_notesSetupNote(s16 position[3]) {
+    const BkbtNoteMap *entry;
+    s32 i;
+
+    i = sBkbtNotesRead++;
+    if (sBkbtNoteMapIx < 0 || i >= sBkbtNoteMaps[sBkbtNoteMapIx].count) {
+        return FALSE;
+    }
+    entry = &sBkbtNoteMaps[sBkbtNoteMapIx];
+    sBkbtNotePos[i][0] = position[0];
+    sBkbtNotePos[i][1] = position[1];
+    sBkbtNotePos[i][2] = position[2];
+    return bkbt_file_chosen && bkbt_noteKept(BKBT_AP_NOTE_INDEX(entry->level, entry->first + i));
+}
+
+/* At the end of the setup read: a map whose setup does not hold the table's count is not numbered. */
+void bkbt_notesSetupEnd(void) {
+    if (sBkbtNoteMapIx >= 0 && sBkbtNotesRead != sBkbtNoteMaps[sBkbtNoteMapIx].count) {
+        sBkbtNoteMapIx = -1;
+    }
+}
+
+/* A note kept: with notesanity the count does not rise and the level's best is set to its notes kept (the
+ * pause menu's count); without, the game counts it as retail does, from where the level entry started it. */
+static bool bkbt_apNoteCounted(s32 level) {
+    if (sBkbtNotesanity) {
+        sItemscoreNoteScores[level] = bkbt_notesInLevel(level);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* A placed note picked up (src/core2/ba/marker.c): found by its position among the notes of the map in
+ * play, and kept. TRUE when the game is to count it as retail does: outside a chosen game, for a note the
+ * table does not know, and for a note kept without notesanity. */
+bool bkbt_apNotePicked(s16 position[3]) {
+    const BkbtNoteMap *entry;
+    s32 i;
+    s32 index;
+
+    if (!bkbt_apNotesActive() || sBkbtNoteMapIx < 0 || sBkbtNoteMap != gsworld_getMap()) {
+        return TRUE;
+    }
+    entry = &sBkbtNoteMaps[sBkbtNoteMapIx];
+    for (i = 0; i < entry->count; i++) {
+        if (sBkbtNotePos[i][0] == position[0] && sBkbtNotePos[i][1] == position[1] &&
+            sBkbtNotePos[i][2] == position[2]) {
+            index = BKBT_AP_NOTE_INDEX(entry->level, entry->first + i);
+            if (bkbt_noteKept(index)) {
+                bkbt_notes_picked_again++; /* kept already, so it should have been hidden: nothing to count */
+                return FALSE;
+            }
+            bkbt_noteKeep(index);
+            return bkbt_apNoteCounted(entry->level);
+        }
+    }
+    return TRUE;
+}
+
+/* A hut's note picked up (actor 0x51, src/core2/ba/marker.c): the five are alike, so it is the level's
+ * first hut note not kept yet. TRUE as for bkbt_apNotePicked; FALSE when all five are kept already. */
+bool bkbt_apHutNotePicked(void) {
+    s32 level;
+    s32 n;
+    s32 index;
+
+    level = level_get();
+    if (!bkbt_apNotesActive() || !bkbt_hutLevel(level)) {
+        return TRUE;
+    }
+    for (n = BKBT_AP_HUT_NOTE_FIRST; n < BKBT_AP_NOTES_PER_LEVEL; n++) {
+        index = BKBT_AP_NOTE_INDEX(level, n);
+        if (!bkbt_noteKept(index)) {
+            bkbt_noteKeep(index);
+            return bkbt_apNoteCounted(level);
+        }
+    }
+    bkbt_notes_picked_again++; /* all five kept: the hut should not have dropped it */
+    return FALSE;
+}
+
+/* How many of a hut's `count` notes drop (__bundle_spawnWithFirstActor, src/core2/code_41FB0.c): those of
+ * the level not kept yet, while the chosen game is in play. */
+s32 bkbt_apHutNotesLeft(s32 count) {
+    s32 level;
+    s32 n;
+    s32 left = 0;
+
+    level = level_get();
+    if (!bkbt_file_chosen || !bkbt_hutLevel(level)) {
+        return count;
+    }
+    for (n = BKBT_AP_HUT_NOTE_FIRST; n < BKBT_AP_NOTES_PER_LEVEL; n++) {
+        left += !bkbt_noteKept(BKBT_AP_NOTE_INDEX(level, n));
+    }
+    return MIN(left, count);
+}
+
+/* At a level entry (level_load, src/core2/code_9A740.c, right after it zeroes the visit's count; also on the
+ * reload after a death): the level's best becomes its notes kept, then the count goes there quietly (it
+ * stays 0 with notesanity), in that order, so that the count's own code (item_adjustByDiff,
+ * src/core2/code_BEF20.c, which runs without the HUD too) sees no new best: no text, no extra life. Only for
+ * the nine levels: level_load runs for 0xC and 0xD too, past the end of sItemscoreNoteScores. */
+void bkbt_apNotesLevelEntry(s32 level) {
+    s32 kept;
+    s32 want;
+
+    if (!bkbt_file_chosen || !bkbt_jinjoLevel(level)) {
+        return;
+    }
+    kept = bkbt_notesInLevel(level);
+    sItemscoreNoteScores[level] = kept;
+    want = sBkbtNotesanity ? 0 : kept;
+    if (want != item_getCount(ITEM_C_NOTE)) {
+        item_adjustByDiff(ITEM_C_NOTE, want - item_getCount(ITEM_C_NOTE), TRUE);
+    }
+}
+
+/* After the chosen game is loaded (bkbt_gameFile_loadAP, src/core2/code_B5E00.c, which runs after the
+ * game's own load of the record): notesanity is latched, and every level's best is its notes kept, the
+ * game's saved bests notwithstanding. A mid-session reload may come while the client is changing its
+ * settings; then the latch stays. */
+void bkbt_apNotesLoaded(void) {
+    s32 level;
+
+    if (bkbt_apSettingsCommitted()) {
+        sBkbtNotesanity = bkbt_ap_settings.notesanity != 0;
+    }
+    for (level = LEVEL_1_MUMBOS_MOUNTAIN; level <= LEVEL_A_MAD_MONSTER_MANSION; level++) {
+        if (bkbt_jinjoLevel(level)) {
+            sItemscoreNoteScores[level] = bkbt_notesInLevel(level);
+        }
+    }
+}
+
+/* The note total the game shows and the note doors' thresholds read (itemscore_noteScores_getTotal,
+ * src/core2/code_BEF20.c): with notesanity in the chosen game the Notes received, otherwise its own sum of
+ * the levels' bests, which with the notes kept is every note picked up. */
+s32 bkbt_apNotesTotal(s32 total) {
+    if (bkbt_file_chosen && sBkbtNotesanity) {
+        return sBkbtNotesReceived;
+    }
+    return total;
+}
+
+bool bkbt_apNotesKept(void) {
+    return bkbt_file_chosen;
+}
+
+/* On every mainLoop iteration: the Notes received while the settings are committed, and while the chosen
+ * game is in play the locations, a copy of the notes kept. */
+static void bkbt_apNotes(void) {
+    s32 i;
+
+    if (bkbt_apSettingsCommitted()) {
+        sBkbtNotesReceived = MIN(bkbt_ap_items.notes, BKBT_AP_NOTE_MAX);
+    }
+    if (!bkbt_file_chosen) {
+        return;
+    }
+    for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
+        bkbt_ap_locations.notes[i] = bkbt_notes_collected[i];
+    }
+}
+
 /* The note doors received (include/bkbt.h), for the door actor (src/lair/lairspawnqueue.c), which asks
  * while Banjo is near it: the door opens on its item instead of on a note total. */
 bool bkbt_apNoteDoorReceived(s32 door) {
@@ -693,6 +962,7 @@ void bkbt_frame(void) {
     bkbt_apHoneycombs();
     bkbt_apJiggies();
     bkbt_apTokens();
+    bkbt_apNotes();     /* before the thresholds, which read the Notes received */
     bkbt_apNoteDoors();
     bkbt_apGoal();
     bkbt_apJinjos();

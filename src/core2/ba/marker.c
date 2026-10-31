@@ -7,6 +7,9 @@
 #include "prop.h"
 
 #include "core2/dustemitter.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void func_803012F8(void);
 extern void __baMarker_8028BA00(s32);
@@ -181,6 +184,19 @@ void __baMarker_resolveMusicNoteCollision(Prop *arg0) {
     }
     fxSparkle_musicNote(arg0->position);
 }
+
+#if BKBT
+/* A note picked up that the game does not count (src/core1/code_0.c, bkbt_apNotePicked): with notesanity it
+ * is only an Archipelago location. It goes as __baMarker_resolveMusicNoteCollision has it go, with its
+ * jingle, the first-note text and its sparkle, but the count does not rise. */
+static void __baMarker_resolveMusicNoteKept(Prop *arg0) {
+    if (item_getCount(ITEM_C_NOTE) < 100) {
+        coMusicPlayer_playMusic(COMUSIC_9_NOTE_COLLECTED, 16000);
+        timedFunc_set_1(0.75f, progressDialog_showDialogMaskZero, FILEPROG_3_MUSIC_NOTE_TEXT);
+    }
+    fxSparkle_musicNote(arg0->position);
+}
+#endif
 
 void __baMarker_8028BAB0(enum jiggy_e jiggy_id, s32 arg1, s32 arg2, s32 arg3){
     if(jiggyscore_isCollected(jiggy_id))
@@ -705,6 +721,12 @@ void __baMarker_resolveCollision(Prop *other_prop){
                 if(__baMarker_8028BC20(marker))
                     return;
 
+#if BKBT
+                /* A hut's note: kept, and counted only without notesanity (src/core1/code_0.c) */
+                if (!bkbt_apHutNotePicked()) {
+                    __baMarker_resolveMusicNoteKept(other_prop);
+                } else
+#endif
                 __baMarker_resolveMusicNoteCollision(other_prop);
                 marker_despawn(marker);
                 break;
@@ -867,6 +889,12 @@ void __baMarker_resolveCollision(Prop *other_prop){
         case ASSET_6D6_SPRITE_MUSIC_NOTE: //L8028D144
             if(!__baMarker_8028BC60()){
                 other_prop->spriteProp.isNotFeatherEggOrNote = 0;
+#if BKBT
+                /* A placed note: kept, and counted only without notesanity (src/core1/code_0.c) */
+                if (!bkbt_apNotePicked(other_prop->spriteProp.position)) {
+                    __baMarker_resolveMusicNoteKept(other_prop);
+                } else
+#endif
                 __baMarker_resolveMusicNoteCollision(other_prop);
             }
             break;

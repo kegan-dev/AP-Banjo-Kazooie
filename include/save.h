@@ -24,9 +24,12 @@ typedef struct{
     /* The Jinjos picked up (bkbt_jinjos_checked), one mask per level, since the Jinjos' build: the
      * record grew from 0x90 to 0xA0 bytes for them */
     u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]; /* +0x8C */
-    u8 spare[6];                            /* +0x96: 0. Named, so that the room left for the hack is visible */
+    /* The notes picked up (bkbt_notes_collected), a bit each, since the notes' build: the record grew from
+     * 0xA0 to 0x120 bytes for them */
+    u8 notes_collected[BKBT_AP_NOTE_BYTES]; /* +0x96 */
+    u8 spare[9];                            /* +0x113: 0. Named, so that the room left for the hack is visible */
 #endif
-    u32 checksum;                           /* the last word: +0x9C in the hack build, +0x74 in retail */
+    u32 checksum;                           /* the last word: +0x11C in the hack build, +0x74 in retail */
 }SaveData;
 
 typedef struct {

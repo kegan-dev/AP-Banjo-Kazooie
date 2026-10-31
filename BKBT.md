@@ -57,7 +57,8 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    and the linker symbol `bkbt_sram_offset` with its assertions in `manual_syms.us.v10.txt`. From
    2026-10-14 to 2026-10-26 only inside the image, chosen by `bkbt_launched()` in `src/core1/code_0.c`,
    with retail's 512 bytes; by itself the ROM kept its EEPROM. The game record grew from `0x78` to `0x90`
-   bytes on 2026-10-26 and to `0xA0` with the Jinjos of 2026-10-29 (item 19).
+   bytes on 2026-10-26, to `0xA0` with the Jinjos of 2026-10-29 (item 19) and to `0x120` with the notes of
+   2026-10-30 (item 20).
 7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
@@ -156,6 +157,16 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     `manual_syms.us.v10.txt`, `src/core2/ch/jinjo.c`, `src/core2/code_9A740.c`, `src/core2/code_ABC00.c`,
     `src/core2/code_B5040.c`, `src/core2/code_956B0.c`, `src/core2/code_BEF20.c`, `src/core2/code_41FB0.c`,
     `src/RBB/ch/bellbuoy.c` ("Jinjos as Archipelago items and locations" below).
+20. **Notes kept, and notes as Archipelago locations** (2026-10-30; `docs/ROADMAP.md` of the BKBT
+    repository, hack features 3 and 4): every note picked up stays picked up, saved with the game, and a
+    level's count is every note picked up there; each note is published as a location. With notesanity (a
+    setting, layout 0.11.0) a note picked up is only a check, and the note totals are the Notes received
+    (the items' `+0x5A`). The game record grew from `0xA0` to `0x120` bytes; the locations to 464.
+    `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`, `src/core1/eeprom.c`,
+    `manual_syms.us.v10.txt`, `src/core2/gccube.c`, `src/core2/code_A5BC0.c`, `src/core2/ba/marker.c`,
+    `src/core2/code_41FB0.c`, `src/core2/code_9A740.c`, `src/core2/code_B5040.c`, `src/core2/code_B5E00.c`,
+    `src/core2/code_956B0.c`, `src/core2/code_BEF20.c` ("Notes kept, and notes as Archipelago locations"
+    below).
 
 ## The frame hook
 
@@ -326,7 +337,8 @@ Tooie hack keeps its save there from offset 0; this game's part starts at `bkbt_
 By itself the ROM has the same layout, and its header declares the SRAM, so that an emulator or a
 flashcart gives it one. So since 2026-10-26 (item 13 above); from 2026-10-14 until then only inside the
 image, chosen by `bkbt_launched()` and with retail's 512 bytes, while the ROM by itself kept its EEPROM.
-Since the Jinjos of 2026-10-29 (item 19) a game record is `0xA0` bytes.
+Since the Jinjos of 2026-10-29 (item 19) a game record was `0xA0` bytes, and since the notes of 2026-10-30
+(item 20) it is `0x120`.
 The full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
 repository, "The save device".
 
@@ -337,13 +349,14 @@ repository, "The save device".
   Archipelago items and locations"), then under `#if BKBT` `u32 seed` at `+0x74` and
   `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
   Archipelago locations"), `u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]` at `+0x8C..+0x95` ("Jinjos as
-  Archipelago items and locations"), `u8 spare[6]` at `+0x96..+0x9B`, 0, kept for the hack, then the
-  checksum at `+0x9C`: `0xA0` bytes since 2026-10-29 (`0x90` from 2026-10-26, with the checksum at
-  `+0x8C`; retail `0x78`). In the SRAM: the records at `0x7000`, `0x70A0`, `0x7140`, `0x71E0`, the global
-  record at `0x7280`, this game's part `0x7000..0x729F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which
-  a compile-time check there holds at `0x2A0` and to whole EEPROM blocks. No magic or version of its own: a
-  save of a build with `0x78`- or `0x90`-byte records fails the checksum at the new places and shows as
-  empty files.
+  Archipelago items and locations"), `u8 notes_collected[BKBT_AP_NOTE_BYTES]` at `+0x96..+0x112` ("Notes
+  kept, and notes as Archipelago locations"), `u8 spare[9]` at `+0x113..+0x11B`, 0, kept for the hack, then
+  the checksum at `+0x11C`: `0x120` bytes since 2026-10-30 (`0xA0` from 2026-10-29, with 6 spare bytes at
+  `+0x96` and the checksum at `+0x9C`; `0x90` from 2026-10-26, with the checksum at `+0x8C`; retail `0x78`).
+  In the SRAM: the records at `0x7000`, `0x7120`, `0x7240`, `0x7360`, the global record at `0x7480`, this
+  game's part `0x7000..0x749F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which a compile-time check there
+  holds at `0x4A0` and to whole EEPROM blocks. No magic or version of its own: a save of a build with
+  `0x78`-, `0x90`- or `0xA0`-byte records fails the checksum at the new places and shows as empty files.
 - **Where.** `src/core1/eeprom.c`, under `#if BKBT`: retail's `eeprom_writeBlocks` and `eeprom_readBlocks`
   are the `#else` (`:159-184`) and not in the hack build, and `bkbt_write` and `bkbt_read` (`:145-158`,
   declared in `include/core1/eeprom.h:4-12`) take their place, with `offset` and `count` in bytes from the
@@ -369,8 +382,8 @@ repository, "The save device".
 - **The offset** is the linker symbol `bkbt_sram_offset = 0x7000;` in `manual_syms.us.v10.txt`, used as
   `(u32) bkbt_sram_offset` (`include/bkbt.h`), so that the map carries it for the tools. `0x7000` is the
   border the two games share: below it the SRAM is the Tooie hack's. The link stops if the offset is
-  below `0x7000`, not a multiple of 8, or leaves fewer than `0x2A0` bytes in the 32 KiB (since the
-  Jinjos; `0x200` before, which no longer matched `BKBT_SRAM_BYTES` from 2026-10-26 on, harmless at
+  below `0x7000`, not a multiple of 8, or leaves fewer than `0x4A0` bytes in the 32 KiB (since the
+  notes; `0x2A0` with the Jinjos, `0x200` before, which no longer matched `BKBT_SRAM_BYTES` from 2026-10-26 on, harmless at
   `0x7000`); the compile-time check in `src/core1/eeprom.c` keeps `BKBT_SRAM_BYTES` at that number. The Tooie side's copy is
   `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
   `_Static_assert` in its `src/save.c`; nothing compares the two, so change both. The BKBT repository's
@@ -383,10 +396,10 @@ repository, "The save device".
   builds the same request (`epidma.c:46-58`), is not among the libultra files this ROM links, and both
   builds share that list (`decompressed.us.v10.yaml`).
 - **The buffer and the cache.** Every transfer goes through `sBkbtSramBuf`, on a 16-byte boundary inside
-  `sBkbtSramRaw` (`eeprom.c:42`) and `BKBT_SRAM_BYTES` (`0x2A0`, 42 whole cache lines) long, never
+  `sBkbtSramRaw` (`eeprom.c:42`) and `BKBT_SRAM_BYTES` (`0x4A0`, 74 whole cache lines) long, never
   through the caller's buffer, which shares cache lines with other variables. The buffer is written back
   before every transfer and invalidated after a read. Every transfer the game asks for has an SRAM offset
-  and a length that are multiples of 8 (`0xA0`, `0x20` and the 8-byte wipe).
+  and a length that are multiples of 8 (`0x120`, `0x20` and the 8-byte wipe).
 - **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside `BKBT_SRAM_BYTES`, with
   nothing transferred (`offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset`, `:87`; the constant
   is cast to `s32`, so that the test stays signed: with `sizeof`'s unsigned type it wrapped, found by the
@@ -549,16 +562,17 @@ settings of 2026-10-18, "The Archipelago settings" below, 20 since the items of 
 Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Archipelago locations"; the
 same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, 0.7.0,
 the Mumbo tokens of the same day, 0.8.0, the note doors of that day, which grew the structs it points
-to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, and 0.10.0, the Jinjos of
-2026-10-29, which grew the structs again). An
+to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, 0.10.0, the Jinjos of
+2026-10-29, which grew the structs again, and 0.11.0, the notes of 2026-10-30, which took padding bytes of the
+settings and the items and grew the locations). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h:251-285`), big-endian like everything the client reads, version 0.10.0
-  since the Jinjos of 2026-10-29 (0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.11.0
+  since the notes of 2026-10-30 (0.10.0 with the Jinjos of 2026-10-29, 0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
   jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day,
   0.9.0 with Gruntilda beaten of 2026-10-28):
@@ -570,7 +584,7 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x05` | `u8 padding` | 0 |
   | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 10 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0) |
+  | `+0x0A` | `u8 version_minor` | 11 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0, 10 in 0.10.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
@@ -581,7 +595,9 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   layout of what the pointers point to: in 0.5.0 the items grew from 20 to 24 bytes and the locations
   from 20 to 48, in 0.6.0 the locations to 152 and in 0.7.0 to 268 (the items took a byte of their
   padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor;
-  0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing. Later features append
+  0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing, 0.10.0 grew the items to 92 and
+  the locations to 336, and 0.11.0 took the settings' `+0x05` and the items' `+0x5A..+0x5B` from their
+  padding and grew the locations to 464. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
@@ -1535,9 +1551,90 @@ Checked on mupen64plus on 2026-10-29 with the BKBT repository's Jinjo check (`co
 the autotest image), the seed check with Jinjos planted, the client check and the save check on the `0xA0`
 record (`hack/DUALBOOT.md` of the BKBT repository, "Checked"). The owner tried that build by hand on ares
 v148 on 2026-10-29 with the client and a server: everything passed but the thrown jiggy ("The Jinjo jiggy"
-above). The hold that followed was checked on mupen64plus only: the Jinjo check's jiggy runs, standing and
-with Banjo walking (`--walk`), and the whole matrix again, 217 runs. Not checked: a console, the levels
-other than Mumbo's Mountain, the bell buoy, the hold by hand.
+above). The hold that followed was checked on mupen64plus: the Jinjo check's jiggy runs, standing and
+with Banjo walking (`--walk`), and the whole matrix again, 217 runs; and the owner tried it by hand on
+Project64 3.0.1 with the notes' hand test (reported 2026-10-31): it passed. Not checked: a console, the levels
+other than Mumbo's Mountain, the bell buoy.
+
+## Notes kept, and notes as Archipelago locations
+
+With `BKBT=1` every note Banjo picks up in the chosen game stays picked up, saved with the game, so a level's
+notes never have to be collected again; and each note is published as an Archipelago location, which the world
+uses with its setting `notesanity`. With notesanity the notes are Archipelago items too: a note picked up is only a
+check, and the game's note totals are the Notes received. There is no switch for keeping the notes: every hack
+build, by itself and in the dual-boot image; the matching build has none of it. Done on 2026-10-30
+(`docs/ROADMAP.md` of the BKBT repository, hack features 3 and 4), built by Claude with the owner reviewing; the
+owner's decisions of that day: the notes are kept with or without notesanity, notesanity is Lighthouse's model (900
+Note items, the thresholds count the Notes received), and with it a pickup shows nothing, as the tokens'.
+
+- **How retail does it** (`docs/bk-decomp-notes.md` of the BKBT repository, "Notes and note doors"). 900 notes, 100
+  a level: 890 note sprites in 52 maps' setups, and five that a hut drops in Mumbo's Mountain (the first smashed,
+  `BUNDLE_0_MM_HUT_MUSIC_NOTE`) and in Bubblegloop Swamp (hut 2, by its height, `BUNDLE_B_BGS_HUT_MUSIC_NOTE`),
+  actor `0x51`. A pickup (`src/core2/ba/marker.c:863-871`, `:704-709`) hides the sprite for the rest of the level
+  visit and counts it (`ITEM_C_NOTE`, the visit's count); the level keeps its best count of one visit
+  (`sItemscoreNoteScores`, saved), and the notes come back at the next visit and after a death.
+- **The numbers** (`include/bkbt.h`, `BKBT_AP_NOTE_INDEX(level, n)` = `(level - 1) * 100 + n`). n is a note's
+  number in its level: the level's maps by map id, each map's note sprites in its setup's order, then the hut's
+  five (n 95..99 in levels 1 and 4). The game reads a setup in its file's order (`cubeList_fromFile`,
+  `src/core2/gccube.c`; `code7AF80_initCubeFromFile`, `src/core2/code_A5BC0.c`), the order the BKBT repository's
+  `tools/bk_notes.py` reads; it checks the table `sBkbtNoteMaps` in `src/core1/code_0.c` (the 52 maps with notes,
+  each with its level, its first n and its count) against the retail ROM (`--hack`), and the world's numbers
+  (`worlds/banjo_kazooie/Notes.py`, written by `tools/lighthouse_logic.py`) against it too.
+- **The setup read.** `cubeList_fromFile` starts the count (`bkbt_notesSetupBegin`) and ends it
+  (`bkbt_notesSetupEnd`: a map whose setup does not hold the table's count is not numbered); each note sprite the
+  prop loop meets gets the next number and its position is kept (`bkbt_notesSetupNote`), and one the chosen game
+  has kept is hidden, with the bit a pickup clears (`isNotFeatherEggOrNote`; the hack only ever hides here, as the
+  game does in Furnace Fun). The map savestates of a level visit, applied after the read, agree with it.
+- **The pickup.** A placed note is found by its position among the map's (only the prop is known there, and the
+  game re-sorts props), a hut's note is the level's first hut note not kept yet (the five are alike); its bit is
+  set in `bkbt_notes_collected` (`bkbt_apNotePicked`, `bkbt_apHutNotePicked`). Without notesanity the game counts
+  it as retail does; with it the count does not rise (`__baMarker_resolveMusicNoteKept`: the jingle, the
+  first-note text and the sparkle stay) and the level's best is set to its notes kept. A hut drops only the notes
+  not kept yet (`__bundle_spawnWithFirstActor`, `src/core2/code_41FB0.c`, with a local count; none: nothing is
+  spawned, and the spawn queue ignores the NULL).
+- **The counts.** At a level entry (`level_load`, `src/core2/code_9A740.c`, also after a death, for the nine
+  levels only: it runs for `0xC` and `0xD` too, past the end of `sItemscoreNoteScores`) the level's best becomes
+  its notes kept, then the count is brought there quietly (0 with notesanity), in that order, so that the count's
+  own code (`item_adjustByDiff`, which runs without the HUD too) sees no new best, no 50 or 100 text and no extra
+  life; Mumbo's Mountain's 50 and 100 texts and the extra life then come once, at its 50th and 100th note ever. At
+  the load of the chosen game (`bkbt_gameFile_loadAP`, after the record's own load) every level's best becomes its
+  notes kept. "A new best" (`0xF76`) and the text on leaving the level are dropped while a file is chosen
+  (`itemscore_noteScores_update`, `src/core2/code_BEF20.c`): every visit that picks up a note would show them.
+- **Notesanity** (the settings' `+0x05`, latched when a file is chosen, `bkbt_apNotesLoaded`; at a mid-session
+  reload only while the settings are committed, since the client writes seed 0 first). `itemscore_noteScores_getTotal`
+  gives the Notes received while a file is chosen (`bkbt_apNotesTotal`; the items' `+0x5A`, a big-endian u16 taken
+  while the settings are committed and kept between commits, at most 900): the note doors' thresholds, the Lair's
+  note counter and the pause menu's total. The pause menu's per-level counts are the notes kept; the file select,
+  before a file is chosen, shows the notes kept too.
+- **The save and the locations.** `bkbt_notes_collected[125]`, a bit per note number, saved at record `+0x96`
+  ("The save device": the record grew from `0xA0` to `0x120`), loaded with the chosen game, zeroed by
+  `clearScoreStates`; published on every main-loop iteration while `bkbt_file_chosen` (`bkbt_apNotes`, which runs
+  before the thresholds), as the locations' `notes[125]` at `+0x150` (layout 0.11.0: 464 bytes).
+- **For the tools.** `bkbt_notes_collected` and `sItemscoreNoteScores` are globals in the map, and so is
+  `bkbt_notes_picked_again`, the count of notes picked up that were kept already, which stays 0: a tool reads it
+  as the proof that a note kept is not there to pick up (nothing else shows it: the pickup of a kept note
+  counts nothing). The BKBT
+  repository's note check (`tools/bk_note_check.py`) plants notes kept, puts Banjo onto Mumbo's Mountain's notes and
+  reads the count, the bests, the notes kept and the thresholds; every tool that plants or reads saves knows the
+  `0x120` record (`tools/bk_eeprom.py`), and a planted best count plants that many notes kept
+  (`tools/bk_save_model.py`).
+- **What it costs.** 4,560 bytes of RAM headroom (lair ends at `0x803971C0`, `lair_VRAM_END`: the four records and
+  the SRAM buffer grew by `0x200` each, the locations by 128, the table, one map's positions and the code) and
+  1,056 of ROM room (20,816 bytes before the last 128 KiB, by the image builder's count).
+- **Known limits.** The reloads of Bottles' Bonus, the parade and the ending drop the notes picked up since the last
+  save, as for the molehills. With notesanity Mumbo's Mountain's 100th note gives no extra life and the level's note
+  counter never shows. Bubblegloop Swamp's hut notes come from hut 2 only, as in retail; after a death that puts
+  Banjo back in another map of Mumbo's Mountain its huts may not drop their notes on that visit (retail's count).
+  The pictures of Bottles' Bonus and the attract demos show retail's notes (no game is chosen then).
+
+Checked on mupen64plus on 2026-10-30 with the BKBT repository's note check (`entry`, `placed`, `gone`, `remembered`,
+`total`, with and without notesanity, on the ROM by itself, the autotest image and the pure interpreter, in
+Mumbo's Mountain), the seed check with notes in its files, the client check with Notes and note checks, the save
+check on the `0x120` record and every earlier check, 233 runs (`hack/DUALBOOT.md` of the BKBT repository,
+"Checked", "The notes, 2026-10-30"); four faults put in on purpose failed the runs that guard them. The owner's
+hand test on Project64 3.0.1 with the client, reported 2026-10-31, passed: without and with notesanity, in
+Mumbo's Mountain, its first hut's notes included (`hack/DUALBOOT.md` of the BKBT repository, "Status"). Not
+checked: a console, Bubblegloop Swamp's hut, the levels other than Mumbo's Mountain.
 
 ## Rules for new code
 
@@ -1558,13 +1655,14 @@ other than Mumbo's Mountain, the bell buoy, the hold by hand.
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
   2026-10-27, 66,768 with the Mumbo tokens of that day, 66,464 with the note doors of that day, 66,384
-  with the goal of 2026-10-28 and 64,528 with the Jinjos of 2026-10-29: the largest, lair, ends at
+  with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29 and 59,968 with the notes of 2026-10-30:
+  the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
   the molehills, at `0x80395170` in that of the save in SRAM, at `0x80395350` in that of the
   honeycombs, at `0x80395590` in that of the jiggies, at `0x80395730` in that of the tokens, at
-  `0x80395860` in that of the note doors, at `0x803958B0` in that of the goal and at `0x80395FF0` in that
-  of the Jinjos, read as `lair_VRAM_END`). Every level overlay is
+  `0x80395860` in that of the note doors, at `0x803958B0` in that of the goal, at `0x80395FF0` in that
+  of the Jinjos and at `0x803971C0` in that of the notes, read as `lair_VRAM_END`). Every level overlay is
   loaded at the end of core2
   and has to end below `0x803A5C00`. The link stops with a `BKBT:` message past that.
 - **No RAM address of the game is a constant.** Everything moves with every build. Take addresses from

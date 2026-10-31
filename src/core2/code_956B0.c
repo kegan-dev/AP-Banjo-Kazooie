@@ -1527,6 +1527,11 @@ void clearScoreStates(void) {
     for (i = 0; i < BKBT_AP_JINJO_SLOTS; i++) {
         bkbt_ap_locations.jinjos[i] = 0;
     }
+    /* And the notes picked up */
+    for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
+        bkbt_notes_collected[i] = 0;
+        bkbt_ap_locations.notes[i] = 0;
+    }
 #endif
 }
 

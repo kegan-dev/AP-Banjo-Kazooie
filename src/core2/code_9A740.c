@@ -43,6 +43,8 @@ void level_load(enum map_e map){
 #if BKBT
         /* The level's Jinjos are the ones the client has sent, from the entry on (src/core1/code_0.c) */
         bkbt_apJinjosLevelEntry(sLevelState.level);
+        /* The level's note count starts at its notes kept (src/core1/code_0.c) */
+        bkbt_apNotesLevelEntry(sLevelState.level);
 #endif
         jiggyscore_clearAllSpawned();
         levelSpecificFlags_clear();

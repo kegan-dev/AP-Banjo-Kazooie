@@ -133,11 +133,25 @@ Actor *__bundle_spawnWithFirstActor(enum bundle_e bundle_id, f32 position[3], Ac
 
     s32 i;
     Bundle *bundle;
+#if BKBT
+    s32 count;
+#endif
 
     bundle_info = gBundle_array + bundle_id;
     actor = NULL;
 
+#if BKBT
+    /* A hut drops only the notes the chosen game has not kept (src/core1/code_0.c); a local count, since
+     * bundle_update reads the table's again. None: nothing is spawned and NULL comes back, which the spawn
+     * queue ignores. */
+    count = bundle_info->count;
+    if (bundle_id == BUNDLE_0_MM_HUT_MUSIC_NOTE || bundle_id == BUNDLE_B_BGS_HUT_MUSIC_NOTE) {
+        count = bkbt_apHutNotesLeft(count);
+    }
+    for (i = 0; i < count; i++) {//L802C90B0
+#else
     for (i = 0; i < bundle_info->count; i++) {//L802C90B0
+#endif
         gBundle_yaw += 360.0 / bundle_info->count;
 
         while (360.0 <= gBundle_yaw) {

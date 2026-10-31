@@ -3,6 +3,9 @@
 #include "functions.h"
 #include "variables.h"
 #include "enums.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 #include <core2/file.h>
 
@@ -968,6 +971,15 @@ void code7AF80_initCubeFromFile(File *file_ptr, Cube *cube) {
                         }
                     }
                 }
+#if BKBT
+                /* The notes, numbered in the order read; one the chosen game has kept stays hidden
+                 * (src/core1/code_0.c) */
+                if (!(this_prop2->isActorProp) && !(this_prop2->isModelProp)
+                    && this_prop2->spriteProp.spriteId + SPRITE_ASSET_OFFSET == ASSET_6D6_SPRITE_MUSIC_NOTE
+                    && bkbt_notesSetupNote(this_prop2->spriteProp.position)) {
+                    this_prop2->isNotFeatherEggOrNote = FALSE;
+                }
+#endif
         }
             
     }
