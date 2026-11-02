@@ -27,7 +27,11 @@ typedef struct{
     /* The notes picked up (bkbt_notes_collected), a bit each, since the notes' build: the record grew from
      * 0xA0 to 0x120 bytes for them */
     u8 notes_collected[BKBT_AP_NOTE_BYTES]; /* +0x96 */
-    u8 spare[9];                            /* +0x113: 0. Named, so that the room left for the hack is visible */
+    u8 pad;                                 /* +0x113: 0 */
+    /* The link to the game's Tooie file (bkbt_playing_link; the hub door, contract 4), since the links'
+     * build: spare bytes before it, so the record stays 0x120 bytes and earlier saves read 0, no link */
+    u32 link;                               /* +0x114 */
+    u8 spare[4];                            /* +0x118: 0. Named, so that the room left for the hack is visible */
 #endif
     u32 checksum;                           /* the last word: +0x11C in the hack build, +0x74 in retail */
 }SaveData;

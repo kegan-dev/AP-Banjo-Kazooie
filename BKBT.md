@@ -187,7 +187,8 @@ game and so does not depend on this build. One payload serves every build of the
 
 ### The contract number
 
-`bkbt_contract = 3;` in `manual_syms.us.v10.txt` (since 2026-10-31, the destination; 2 before) is the only
+`bkbt_contract = 4;` in `manual_syms.us.v10.txt` (since 2026-11-02, the links; 3 from 2026-10-31, the
+destination; 2 before) is the only
 place on this side that says the number. It is a linker symbol so that the map carries it; C uses it as
 `(u32) bkbt_contract`. The launcher carries the same number in a tag, the Tooie hack's C in a tagged record,
 the payload in its header, and the image builder of the BKBT repository compares them all. Raise it when the
@@ -197,16 +198,18 @@ meaning of anything below changes.
 
 At `0x805FFF00`, in Expansion Pak RAM, which this game does not use. The Tooie hack owns the layout
 (`hack/bt/n64/src/dualboot.h` in the BKBT repository; `include/bkbt.h` mirrors what this side uses, and
-the two have to be kept in step). This side uses six words:
+the two have to be kept in step). This side uses ten words:
 
 | Offset | Meaning | Written by | This side |
 |---|---|---|---|
 | `+0x18` | destination (contract 3): `BKBT_DEST_TAG` (`'DS'`) `\| map`, 0 = none, in the started game's numbering | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token; `bkbt_returnTo` writes Tooie's ("The hub door") |
 | `+0x1C` | the destination's entrance | the same | the same |
-| `+0x20` | launch token, `0x424B4700 \| contract` (`'B','K','G',3`), written on every launch of this game | Tooie's launcher | `bkbt_init` reads it and zeroes it |
+| `+0x20` | launch token, `0x424B4700 \| contract` (`'B','K','G',4`), written on every launch of this game | Tooie's launcher | `bkbt_init` reads it and zeroes it |
 | `+0x24` | KSEG0 address of the header of the payload loaded in this launch, 0 if none | Tooie's launcher | `bkbt_init` reads it and zeroes it |
 | `+0x28` | test countdown: `mainLoop` iterations before the game returns by itself, 0 = stay | the Tooie hack | `bkbt_frame` counts it down |
 | `+0x2C` | flags. Bit 0: the chord also works outside the front end. Bit 1 (`BKBT_FLAG_DOOR_TEST`, tests): the countdown counts in the Lair's lobby only, and then takes its way out ("The hub door") | the Tooie hack | `bkbt_init` latches it |
+| `+0x30` | link (contract 4): with a destination, the link of the Tooie file at the hub door, or back to Tooie the one the save carries (`bkbt_playing_link`); 0 = none | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token and the hub door's destination; `bkbt_returnTo` writes it |
+| `+0x34..+0x3C` | from Tooie with a destination: the links its three files hold, 0 = none; to Tooie 0 | the same | `bkbt_init` reads them and zeroes them; `bkbt_returnTo` writes 0 |
 
 **This side accesses the block through KSEG1 only** (`0xA05FFF00`, `volatile`). The return launcher
 writes the block uncached and then flushes the caches, so a line of the block that this game had left
@@ -353,8 +356,9 @@ repository, "The save device".
   `u8 move_locations[BKBT_AP_MOVE_COUNT]` at `+0x78..+0x8B` ("The Archipelago settings", "Molehills as
   Archipelago locations"), `u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]` at `+0x8C..+0x95` ("Jinjos as
   Archipelago items and locations"), `u8 notes_collected[BKBT_AP_NOTE_BYTES]` at `+0x96..+0x112` ("Notes
-  kept, and notes as Archipelago locations"), `u8 spare[9]` at `+0x113..+0x11B`, 0, kept for the hack, then
-  the checksum at `+0x11C`: `0x120` bytes since 2026-10-30 (`0xA0` from 2026-10-29, with 6 spare bytes at
+  kept, and notes as Archipelago locations"), `u8 pad` at `+0x113`, `u32 link` at `+0x114..+0x117` (since
+  2026-11-02, from the spare bytes, "The hub door"), `u8 spare[4]` at `+0x118..+0x11B`, 0, kept for the hack,
+  then the checksum at `+0x11C`: `0x120` bytes since 2026-10-30 (`0xA0` from 2026-10-29, with 6 spare bytes at
   `+0x96` and the checksum at `+0x9C`; `0x90` from 2026-10-26, with the checksum at `+0x8C`; retail `0x78`).
   In the SRAM: the records at `0x7000`, `0x7120`, `0x7240`, `0x7360`, the global record at `0x7480`, this
   game's part `0x7000..0x749F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which a compile-time check there
@@ -1641,35 +1645,59 @@ checked: a console, Bubblegloop Swamp's hut, the levels other than Mumbo's Mount
 
 ## The hub door
 
-Contract 3, 2026-10-31 (the BKBT repository's `hack/DUALBOOT.md`, "The hub door", which has both games'
-halves). Tooie's Spiral Mountain entrance to its ruined Lair starts this game with the destination
-`BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY`, `WARP_GL_MM_LOBBY_12_ENTRANCE` in the handoff block (`include/bkbt.h`).
+Contract 3, 2026-10-31, and the links and the curtain of contract 4, 2026-11-02 (the BKBT repository's
+`hack/DUALBOOT.md`, "The hub door", which has both games' halves). Tooie's Spiral Mountain entrance to its
+ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY`,
+`WARP_GL_MM_LOBBY_12_ENTRANCE` and the links in the handoff block (`include/bkbt.h`).
 
 - **Arrival.** `bkbt_init` reads and zeroes the two words with the token and the payload address; with the
-  token and exactly that destination it sets an arrival and a door session (`src/core1/code_0.c`). Any other
-  destination is ignored. `core1_init` boots into `MAP_91_FILE_SELECT` while the arrival stands, instead of
-  `getDefaultBootMap()`.
-- **The file.** `gameSelect_update` (`src/core2/ch/gameSelect.c`), right after its controller copies, while
+  token and exactly that destination it sets an arrival and a door session, latches the link of the Tooie
+  file at the door and the links of Tooie's three files, and raises the curtain (`src/core1/code_0.c`). Any
+  other destination is ignored. `core1_init` boots into `MAP_91_FILE_SELECT` while the arrival stands, instead
+  of `getDefaultBootMap()`, and blacks the screen as soon as the VI manager runs.
+- **The game** (`bkbt_doorChoose`, `src/core1/code_0.c`; the owner's order, 2026-11-02). Read from
+  `gameFile_saveData[gameFile_GameIdToFileIdMap[g]]`: the save with the Tooie file's link and the committed
+  seed; else an unlinked save of the committed seed, which the link adopts; else an empty game; else a save
+  whose link none of Tooie's files holds, which it erases at once in SRAM (`gameFile_clear`,
+  `gameFile_8033CFD4`, as `src/TTC/ma/castle.c`'s erase cheat) and returns as empty; else -1. Unlinked saves of
+  other seeds are never touched.
+- **The start.** `gameSelect_update` (`src/core2/ch/gameSelect.c`), right after its controller copies, while
   `bkbt_doorArrival()`, no zoombox is up (`func_8038AAB0`), the state is IDLE and the settings are committed:
-  the target is the game that is not empty and whose `gameFile_saveData[gameFile_GameIdToFileIdMap[g]].seed`
-  is the committed seed, else the first empty game. Another game than the one shown is shown first
-  (`setGameInformationZoombox`, which loads it for the file select and sets `bkbt_file_seed`); the one shown
-  gets `face_buttons[A] = 1`, so A takes the path of a press: the seed gate, `bkbt_playing_seed`,
-  `bkbt_gameFile_loadAP`. With every game another seed's, nothing is pressed.
-- **The start.** In `GAME_SELECT_STARTING` a new game and a loaded one alike go to
-  `warp_lairEnterLairFromSMLevel` (the Lair's cutscene, map `0x82`, while `FILEPROG_BD` is not set), and
-  `bkbt_doorArrived()` ends the arrival. A new game skips Spiral Mountain, whose moves come as items.
+  it shows the chosen game once (`setGameInformationZoombox`, which loads it for the file select, or clears
+  the score state of an erased one; `sBkbtDoorShown`), even when it is the game already shown, and on that
+  game's next update starts it as A and `GAME_SELECT_STARTING` do for an arrival, without the press, its
+  sounds, its animation or the "silly" start: `bkbt_playing_seed`, `bkbt_gameFile_loadAP`,
+  `bkbt_playing_link = bkbt_doorLink()`, `bkbt_doorArrived()`, `chBottlesBonus_resetCompleted()`,
+  `warp_lairEnterLairFromSMLevel` (the Lair's cutscene, map `0x82`, while `FILEPROG_BD` is not set) and
+  `gsworld_setEnableUpdate(1)`, then `GAME_SELECT_DONE`. With -1 the curtain lifts and the player chooses;
+  the A path gives a game chosen so the door's link too, and `GAME_SELECT_STARTING` sends it to the Lair
+  as before. A new game skips Spiral Mountain, whose moves come as items.
+- **The link.** `SaveData.link` at `+0x114` (`include/save.h`, from the spare bytes: the record stays `0x120`
+  bytes), through `bkbt_playing_link`: `bkbt_saveData_loadAP` loads it with the game (0 for a new game or an
+  unlinked save), the door's start sets the Tooie file's, `saveData_create` saves it, `bkbt_returnTo` hands it
+  back to Tooie with the hub door's destination.
+- **The curtain** (`bkbt_curtainUp`). While it is up the screen is black and the sound silent: the file
+  select's and the transitions' `osViBlack` calls go through `bkbt_viBlack`, which holds black and keeps what
+  the game asked for, and `audioManager_handleFrameMsg` (`src/core1/code_1D00.c`) zeroes every buffer before
+  `osAiSetNextBuffer` (`bkbt_silence`: through the data cache, then `osWritebackDCache`, as libultra prepares a
+  buffer for a DMA; not through KSEG1, which upset mupen64plus's recompiler on the Tooie side). Raised by a door arrival and by `bkbt_doorOut`. Lifted by
+  `bkbt_frame` once the game has started and the map is not the file select, or after ten seconds without a
+  committed seed, and by `bkbt_curtainLift` when there is no game to choose; the lifting gives the screen what
+  the game last asked for (the Lair's cutscene has no transition that shows it: from the file select retail
+  shows the new map only because the file select's last call did).
 - **The way out.** `warp_smExitLair` (`src/core2/code_956B0.c`) first asks `bkbt_doorOut()`: in a door
   session with a return entry it marks the door taken and the warp does nothing. The next `bkbt_frame` calls
   `gameSelect_saveAndExit()` (it saves for levels 1..12, the Lair being 6, synchronously through
   `src/core1/eeprom.c`) and `bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT)`, Tooie's Spiral
-  Mountain at exit 2. A session started from the front end keeps BK's own Spiral Mountain. The chord and the
-  countdown return with no destination (`bkbt_return` is `bkbt_returnTo(0, 0)`).
+  Mountain at exit 2, with the save's link. The curtain falls at `bkbt_doorOut`. A session started from the
+  front end keeps BK's own Spiral Mountain. The chord and the countdown return with no destination and no
+  link (`bkbt_return` is `bkbt_returnTo(0, 0)`).
 - **The test.** With `BKBT_FLAG_DOOR_TEST` the countdown counts only in `MAP_69` in game mode 3 and then calls
   `warp_smExitLair(0, 0)` as if Banjo had walked out.
 
 Checked on mupen64plus with the BKBT repository's `tools/dualboot_door_check.py` (two trips, both directions,
-the first through the cutscene, the save then holding the game with `FILEPROG_BD`). The block is reached
+the first through the cutscene, the save then holding the game with `FILEPROG_BD`; since 2026-11-02 the
+curtain on every frame, the links, and each of the choices with planted saves, `--scenario`). The block is reached
 through KSEG1 only: in the build of 2026-10-31 `code_0.c.o` forms it with `lui 0xA05F` five times and has no
 `lui` of `0x805F` or `0x8060`; `gameSelect.c.o` and `code_956B0.c.o` do not touch it. The owner's hand test
 of the image passed on ares v148 on 2026-11-01, twice both ways (the BKBT repository's `hack/DUALBOOT.md`,

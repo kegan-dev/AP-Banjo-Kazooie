@@ -15,6 +15,10 @@
 #if BKBT
 #include "bkbt.h"
 #include "save.h"
+
+/* The game a hub door arrival has shown before it starts it (gameSelect_update): none until then. A door
+ * arrival happens once per boot, and core2's data is loaded afresh at every boot. */
+static s32 sBkbtDoorShown = -1;
 #endif
 
 void debugScoreStates(void);
@@ -413,33 +417,34 @@ void gameSelect_update(Actor *this) {
     controller_copyFaceButtons(0, face_buttons);
     controller_copyJoystick(0, &joystick);
 #if BKBT
-    /* The hub door (include/bkbt.h): once the client has committed the seed, the file whose saved seed is the
-     * committed one, else the first empty one, is chosen as if by the player: shown first
-     * (setGameInformationZoombox, which loads it for the file select and so sets bkbt_file_seed), then A on
-     * this actor's next update, which then takes the path of a press, the seed check included. With every
-     * file another seed's, the player chooses. */
+    /* The hub door (include/bkbt.h): once the client has committed the seed, the game the arrival plays is
+     * chosen by the link of the Tooie file at the door (bkbt_doorChoose, which may erase a save whose Tooie file
+     * is gone) and started out of sight, behind the curtain (bkbt_curtainUp): shown first
+     * (setGameInformationZoombox, which loads it for the file select as browsing does), then on this actor's
+     * next update started as A starts it, without its sounds, its animation or its "silly" start, straight into
+     * the Lair as the STARTING state below does for an arrival. The game gets the Tooie file's link, saved with
+     * it from its next save on. It is shown even when it is the game already shown, so that the score state is
+     * its own after bkbt_doorChoose has erased it. With no game left to choose, the curtain lifts and the
+     * player chooses. */
     if (bkbt_doorArrival() && !func_8038AAB0() && this->state == GAME_SELECT_IDLE && bkbt_apSettingsCommitted()) {
-        extern SaveData gameFile_saveData[4];      /* src/core2/code_B5E00.c */
-        extern s8 gameFile_GameIdToFileIdMap[4];
-        s32 g;
-        s32 target = -1;
+        s32 target = bkbt_doorChoose();
 
-        for (g = 0; g < 3 && target < 0; g++) {
-            if (gameFile_isNotEmpty(g) && gameFile_saveData[gameFile_GameIdToFileIdMap[g]].seed == bkbt_ap_settings.seed) {
-                target = g;
-            }
-        }
-        for (g = 0; g < 3 && target < 0; g++) {
-            if (!gameFile_isNotEmpty(g)) {
-                target = g;
-            }
-        }
-        if (target >= 0 && target != game_number) {
+        if (target < 0) {
+            bkbt_curtainLift();
+        } else if (target != game_number || sBkbtDoorShown != target) {
             previousGameNumber = game_number;
             setGameInformationZoombox(target);
             gameSelectCameraDelta = 0.0f;
-        } else if (target >= 0) {
-            face_buttons[FACE_BUTTON(BUTTON_A)] = 1;
+            sBkbtDoorShown = target;
+        } else {
+            bkbt_playing_seed = bkbt_ap_settings.seed;
+            bkbt_gameFile_loadAP(game_number);
+            bkbt_playing_link = bkbt_doorLink();
+            bkbt_doorArrived();
+            chBottlesBonus_resetCompleted();
+            timedFunc_set_2(0.0f, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+            timedFunc_set_1(0.0f, (GenFunction_1) gsworld_setEnableUpdate, 1);
+            this->state = GAME_SELECT_DONE;
         }
     }
 #endif
@@ -609,6 +614,11 @@ void gameSelect_update(Actor *this) {
                      * from being read by the client */
                     bkbt_playing_seed = bkbt_ap_settings.seed;
                     bkbt_gameFile_loadAP(game_number);
+                    /* A game the player chooses at a hub door arrival (when bkbt_doorChoose found none) is
+                     * the Tooie file's from now on */
+                    if (bkbt_doorArrival()) {
+                        bkbt_playing_link = bkbt_doorLink();
+                    }
 #endif
                     if (gameFile_isNotEmpty(game_number)) {
                         if (randf() < 0.1) { // Rarely activate "silly" animations
@@ -736,7 +746,11 @@ void gameSelect_update(Actor *this) {
     );
 
     if (this->marker->unk14_21) {
+#if BKBT
+        bkbt_viBlack(0);    /* held black behind the hub door's curtain (include/bkbt.h) */
+#else
         osViBlack(0);
+#endif
     }
 }
 

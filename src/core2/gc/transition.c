@@ -3,6 +3,9 @@
 #include "functions.h"
 #include "variables.h"
 #include "core2/gc/transition.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 void anctrl_setAnimTimer(AnimCtrl*, f32);
 void func_8025AC20(s32, s32, s32, f32, char*, s32);
@@ -199,7 +202,11 @@ void _gctranstion_changeState(s32 state, TransitionInfo *desc){
             gsworld_setEnableUpdate(FALSE); //objects_update(false)
         }
         else{
+#if BKBT
+            bkbt_viBlack(1);    /* remembered for the hub door's curtain (include/bkbt.h) */
+#else
             osViBlack(1);
+#endif
             anctrl_setAnimTimer(s_current_transition.anctrl, 0.25f); //set animation timer
         }
         anctrl_start(s_current_transition.anctrl, "gctransition.c", 0x125); 
@@ -447,7 +454,11 @@ void gctransition_update(void){
                     model_copyFramebufferToTextures(s_current_transition.model_ptr); //framebuffer to model texture list
                     break;
                 case 4:
+#if BKBT
+                    bkbt_viBlack(0);    /* held black behind the hub door's curtain (include/bkbt.h) */
+#else
                     osViBlack(0);
+#endif
                     break;
                 default:
                    s_current_transition.timer += dt;

@@ -7,6 +7,7 @@
 #include "version.h"
 #if BKBT
 #include "bkbt.h"
+#include "save.h"
 #include "core2/abilityprogress.h"
 #endif
 
@@ -163,6 +164,11 @@ static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the 
 static bool sBkbtDoorArrival = FALSE;         /* the hub door brought this boot, and its game has not started yet */
 static bool sBkbtDoorSession = FALSE;         /* the hub door brought this boot: the Lair's exit leads to Tooie */
 static bool sBkbtDoorLeaving = FALSE;         /* the Lair's exit was taken: save and return on the next iteration */
+static u32 sBkbtDoorLink = 0;                 /* the link of the Tooie file the hub door brought (contract 4) */
+static u32 sBkbtDoorFileLinks[3] = {0, 0, 0}; /* the links Tooie's three files hold */
+static bool sBkbtCurtain = FALSE;             /* the screen black and the sound silent (bkbt_curtainUp) */
+static bool sBkbtViWanted = FALSE;            /* what the game last asked osViBlack for (bkbt_viBlack) */
+static OSTime sBkbtCurtainSince = 0;          /* when the curtain began to wait for the client's seed */
 
 /* The Archipelago settings (include/bkbt.h): the client writes them, the game only reads them. All 0, so
  * at every boot they read as not written yet; the anchor points here from the first instruction. */
@@ -175,6 +181,7 @@ BkbtApSettings bkbt_ap_settings = {
 
 u32 bkbt_file_seed = 0;
 u32 bkbt_playing_seed = 0;
+u32 bkbt_playing_link = 0;
 bool bkbt_file_chosen = FALSE;
 
 /* TRUE once the client has written the settings since this boot: it writes the seed last, and a seed is
@@ -887,6 +894,9 @@ void bkbt_init(void) {
     u32 payload;
     u32 dest_map;
     u32 dest_exit;
+    u32 link;
+    u32 file_links[3];
+    s32 i;
     u32 *header;
 
     /* The block is above 4 MiB: without the Expansion Pak there is nothing there to read or to zero.
@@ -899,10 +909,16 @@ void bkbt_init(void) {
     payload = handoff[BKBT_HANDOFF_PAYLOAD];
     dest_map = handoff[BKBT_HANDOFF_DEST_MAP];
     dest_exit = handoff[BKBT_HANDOFF_DEST_EXIT];
+    link = handoff[BKBT_HANDOFF_LINK];
     handoff[BKBT_HANDOFF_TOKEN] = 0;
     handoff[BKBT_HANDOFF_PAYLOAD] = 0;
     handoff[BKBT_HANDOFF_DEST_MAP] = 0;
     handoff[BKBT_HANDOFF_DEST_EXIT] = 0;
+    handoff[BKBT_HANDOFF_LINK] = 0;
+    for (i = 0; i < 3; i++) {
+        file_links[i] = handoff[BKBT_HANDOFF_FILE_LINKS + i];
+        handoff[BKBT_HANDOFF_FILE_LINKS + i] = 0;
+    }
     *BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;
 
     if (token != (BKBT_TOKEN | (u32) bkbt_contract)) {
@@ -910,10 +926,16 @@ void bkbt_init(void) {
     }
     sBkbtLaunched = TRUE;
     sBkbtFlags = handoff[BKBT_HANDOFF_FLAGS];
-    /* The hub door's destination is the only one this game knows (include/bkbt.h) */
+    /* The hub door's destination is the only one this game knows (include/bkbt.h). It comes with the
+     * links (contract 4), and the screen stays black and the sound silent until the Lair is there */
     if (dest_map == (BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY) && dest_exit == WARP_GL_MM_LOBBY_12_ENTRANCE) {
         sBkbtDoorArrival = TRUE;
         sBkbtDoorSession = TRUE;
+        sBkbtDoorLink = link;
+        for (i = 0; i < 3; i++) {
+            sBkbtDoorFileLinks[i] = file_links[i];
+        }
+        sBkbtCurtain = TRUE;
     }
 
     /* A launcher that loaded no payload passes 0. The header has to lie inside the Expansion Pak's half
@@ -963,11 +985,16 @@ void warp_smExitLair(s32 arg0, s32 arg1); /* src/core2/code_956B0.c */
 
 static void bkbt_returnTo(u32 dest_map, u32 dest_exit) {
     volatile u32 *handoff = BKBT_HANDOFF;
+    s32 i;
 
-    /* the destination, on every return (contract 3): Tooie reads it only with the magic the return
-     * launcher writes */
+    /* the destination, on every return (contract 3), and with it the link of the save going back (contract
+     * 4): Tooie reads them only with the magic the return launcher writes */
     handoff[BKBT_HANDOFF_DEST_MAP] = dest_map != 0 ? (BKBT_DEST_TAG | dest_map) : 0;
     handoff[BKBT_HANDOFF_DEST_EXIT] = dest_map != 0 ? dest_exit : 0;
+    handoff[BKBT_HANDOFF_LINK] = dest_map != 0 ? bkbt_playing_link : 0;
+    for (i = 0; i < 3; i++) {
+        handoff[BKBT_HANDOFF_FILE_LINKS + i] = 0;
+    }
     *BKBT_AP_ANCHOR = 0;
     sBkbtReturnEntry();
 }
@@ -986,14 +1013,106 @@ void bkbt_doorArrived(void) {
     sBkbtDoorArrival = FALSE;
 }
 
+u32 bkbt_doorLink(void) {
+    return sBkbtDoorLink;
+}
+
+/* The curtain (include/bkbt.h). Raised by bkbt_init with the hub door's arrival and by bkbt_doorOut; lifted by
+ * bkbt_frame once the destination's map is there, or by bkbt_curtainLift when the player has to choose. The
+ * game's own osViBlack calls (the file select's every frame, a transition's) go through bkbt_viBlack, which
+ * holds the screen black while the curtain is up and remembers what the game asked for: the lifting gives it
+ * that. Not every transition blacks and shows the screen itself (the Lair's cutscene's does not: mupen64plus,
+ * 2026-11-02): from the file select retail shows the new map because the file select's last call showed it. */
+bool bkbt_curtainUp(void) {
+    return sBkbtCurtain;
+}
+
+void bkbt_viBlack(bool black) {
+    sBkbtViWanted = black;
+    osViBlack(sBkbtCurtain ? TRUE : black);
+}
+
+void bkbt_curtainLift(void) {
+    if (sBkbtCurtain) {
+        sBkbtCurtain = FALSE;
+        osViBlack(sBkbtViWanted);
+    }
+}
+
+/* Every audio buffer the audio interface plays while the curtain is up is zeroed first (src/core1/code_1D00.c,
+ * audioManager_handleFrameMsg): through the data cache, which is then written back to RAM, where the interface
+ * reads it, as libultra prepares a buffer for a DMA. Not through KSEG1: the Tooie hack's first build that zeroed
+ * its buffers uncached stopped mupen64plus's recompiler in one test (the BKBT repository's hack/DUALBOOT.md, open
+ * items), and the two games do it the same way. */
+void bkbt_silence(void *buffer, u32 bytes) {
+    u32 *p = (u32 *) buffer;
+    u32 i;
+
+    for (i = 0; i < bytes / 4; i++) {
+        p[i] = 0;
+    }
+    osWritebackDCache(buffer, bytes);
+}
+
+/* The game a hub door arrival plays (include/bkbt.h): the save of the Tooie file's link, else an unlinked save of
+ * the committed seed (a save of the chord, or of a build before the links), which its link adopts, else an empty
+ * file, else a save whose link none of Tooie's files holds any more: its Tooie file was erased, so it is erased
+ * too, at once in SRAM as the sandcastle's erase cheat does it (src/TTC/ma/castle.c), for a new game. Saves of
+ * other seeds that no link ties to a Tooie file are never touched. The owner's order, 2026-11-02. */
+extern SaveData gameFile_saveData[4];   /* src/core2/code_B5E00.c */
+extern s8 gameFile_GameIdToFileIdMap[4];
+void gameFile_clear(s32 gamenum);       /* src/core2/code_B5E00.c */
+s32 gameFile_8033CFD4(s32 gamenum);
+
+s32 bkbt_doorChoose(void) {
+    u32 seed = bkbt_ap_settings.seed;
+    u32 link = sBkbtDoorLink;
+    SaveData *r;
+    s32 g;
+
+    if (link != 0) {
+        for (g = 0; g < 3; g++) {
+            r = &gameFile_saveData[gameFile_GameIdToFileIdMap[g]];
+            if (r->magic != 0 && r->link == link && r->seed == seed) {
+                return g;
+            }
+        }
+    }
+    for (g = 0; g < 3; g++) {
+        r = &gameFile_saveData[gameFile_GameIdToFileIdMap[g]];
+        if (r->magic != 0 && r->link == 0 && r->seed == seed) {
+            return g;
+        }
+    }
+    for (g = 0; g < 3; g++) {
+        r = &gameFile_saveData[gameFile_GameIdToFileIdMap[g]];
+        if (r->magic == 0) {
+            return g;
+        }
+    }
+    for (g = 0; g < 3; g++) {
+        r = &gameFile_saveData[gameFile_GameIdToFileIdMap[g]];
+        if (r->link != 0 && r->link != link && r->link != sBkbtDoorFileLinks[0]
+            && r->link != sBkbtDoorFileLinks[1] && r->link != sBkbtDoorFileLinks[2]) {
+            gameFile_clear(g);
+            gameFile_8033CFD4(g);
+            return g;
+        }
+    }
+    return -1;
+}
+
 /* warp_smExitLair (src/core2/code_956B0.c) asks this first: in a game the hub door started, the Lair's way out
  * to Spiral Mountain leads back to Tooie, from the next main-loop iteration on (bkbt_frame), and the warp
- * does nothing. A game started from the front end keeps its own Spiral Mountain. */
+ * does nothing. A game started from the front end keeps its own Spiral Mountain. The curtain falls at once:
+ * the save and the return that follow show nothing and play nothing. */
 bool bkbt_doorOut(void) {
     if (!sBkbtDoorSession || sBkbtReturnEntry == NULL) {
         return FALSE;
     }
     sBkbtDoorLeaving = TRUE;
+    sBkbtCurtain = TRUE;
+    osViBlack(TRUE);
     return TRUE;
 }
 
@@ -1032,6 +1151,24 @@ void bkbt_frame(void) {
             sBkbtChordSeen++;
         } else {
             sBkbtChordArmed = TRUE;
+        }
+    }
+
+    /* The curtain of a hub door arrival (bkbt_curtainUp): lifted once the file select has started the game and
+     * the destination's map is there, which then shows as the game asks (bkbt_viBlack); or after ten seconds
+     * without a client's seed, so that the player sees why nothing happens. The curtain of the way out stays
+     * up until the return. */
+    if (sBkbtCurtain && !sBkbtDoorLeaving) {
+        enum map_e map = gsworld_getMap();
+
+        if (!sBkbtDoorArrival && map != 0 && map != MAP_91_FILE_SELECT) {
+            bkbt_curtainLift();
+        } else if (sBkbtDoorArrival && !bkbt_apSettingsCommitted()) {
+            if (sBkbtCurtainSince == 0) {
+                sBkbtCurtainSince = osGetTime();
+            } else if (OS_CYCLES_TO_USEC(osGetTime() - sBkbtCurtainSince) >= 10000000) {
+                bkbt_curtainLift();
+            }
         }
     }
 
@@ -1092,6 +1229,12 @@ void core1_init(void) {
 #endif
     rarezip_init(); //initialize decompressor's huft table
     viMgr_init();
+#if BKBT
+    /* The hub door's curtain (bkbt_curtainUp): black from the first frame the VI manager shows */
+    if (bkbt_curtainUp()) {
+        osViBlack(TRUE);
+    }
+#endif
     overlayManager_loadCore2();
     sDebugVar_8027BEF0 = sMainThreadStack[0];
     heap_init();

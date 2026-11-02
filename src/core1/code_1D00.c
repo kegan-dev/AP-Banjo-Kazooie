@@ -6,6 +6,9 @@
 #include "version.h"
 #include "PR/sched.h"
 #include "n_libaudio.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 #define DMA_BLOCK_SIZE VER_SELECT(0x200, 0x270, 0x200, 0x200)
 #define AUDIO_HEAP_SIZE VER_SELECT(0x21000, 0x23A00, 0x21000, 0x21000)
@@ -370,6 +373,12 @@ bool audioManager_handleFrameMsg(AudioInfo *info, AudioInfo *prev_info){
     audioManager_func_802403F0();
     audioManager_func_8023FFAC();
     if (prev_info) {
+#if BKBT
+        /* behind the hub door's curtain the audio interface plays silence (include/bkbt.h, bkbt_silence) */
+        if (bkbt_curtainUp()) {
+            bkbt_silence(prev_info->data, 4 * prev_info->frame_samples);
+        }
+#endif
         ret = osAiSetNextBuffer(prev_info->data, 4 * prev_info->frame_samples);
     }
 

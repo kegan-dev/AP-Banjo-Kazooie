@@ -406,6 +406,8 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
     for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
         bkbt_notes_collected[i] = saveData->notes_collected[i];
     }
+    /* The link to its Tooie file: a hub door arrival sets the Tooie file's after this (bkbt_doorChoose) */
+    bkbt_playing_link = saveData->link;
 }
 #endif
 
@@ -439,6 +441,7 @@ void saveData_create(SaveData *savedata){
     for (i = 0; i < BKBT_AP_NOTE_BYTES; i++) {
         savedata->notes_collected[i] = bkbt_notes_collected[i];
     }
+    savedata->link = bkbt_playing_link;
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));
 }

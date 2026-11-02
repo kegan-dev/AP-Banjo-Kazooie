@@ -7,10 +7,10 @@
 /* BKBT=1 only (BKBT.md). What this ROM shares with the dual-boot image it can be part of, and the hooks
  * the game calls. A ROM started by itself finds none of it and behaves like the plain game.
  *
- * The handoff block mirrors hack/bt/n64/src/dualboot.h in the BKBT repository (dual-boot contract 3):
- * keep the two in step. The Tooie hack and its launcher own the layout. This side uses the six words
- * below: it reads the token, the payload address and the destination and zeroes them, counts the
- * countdown down, only reads the flags, and writes the destination of its return.
+ * The handoff block mirrors hack/bt/n64/src/dualboot.h in the BKBT repository (dual-boot contract 4):
+ * keep the two in step. The Tooie hack and its launcher own the layout. This side uses the ten words
+ * below: it reads the token, the payload address, the destination and the links and zeroes them, counts
+ * the countdown down, only reads the flags, and writes the destination and the link of its return.
  *
  * This side accesses the block through KSEG1 only. The launcher that returns to Tooie writes the block
  * uncached and then flushes the caches: a line of the block left dirty in this game's data cache would be
@@ -25,6 +25,8 @@
 #define BKBT_HANDOFF_PAYLOAD   9  /* +0x24: KSEG0 address of the payload header loaded in this launch, 0 if none; bkbt_init zeroes it */
 #define BKBT_HANDOFF_COUNTDOWN 10 /* +0x28: main-loop iterations before the game returns by itself, 0 = stay (tests) */
 #define BKBT_HANDOFF_FLAGS     11 /* +0x2C: BKBT_FLAG_*, latched by bkbt_init */
+#define BKBT_HANDOFF_LINK      12 /* +0x30: with a destination, the link of the Tooie file at the door (from Tooie) or of the save going back (to it); 0 = none (contract 4) */
+#define BKBT_HANDOFF_FILE_LINKS 13 /* +0x34..+0x3C: from Tooie with a destination, the links its three files hold, 0 = none; to it 0. Like the destination: written on every launch, zeroed by the game started */
 
 /* The launch token is 'B','K','G' and the contract number in the low byte. The number is the linker
  * symbol bkbt_contract (manual_syms.us.v10.txt), its only definition on this side: use it as
@@ -46,18 +48,32 @@ extern u8 bkbt_contract[];
 #define BKBT_FLAG_CHORD_ANYWHERE 0x00000001 /* the chord also works outside the front end */
 #define BKBT_FLAG_DOOR_TEST      0x00000002 /* tests: the countdown counts in the Lair's lobby, and then takes its exit */
 
-/* The hub door (contract 3; BKBT.md, "The hub door"). Tooie's Spiral Mountain entrance to its ruined Lair
- * starts this game with the destination BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE:
- * the game boots into the file select, chooses the file of the client's seed and starts it in the Lair.
- * In a game started so, the Lair's way out to Spiral Mountain saves and returns to Tooie with the
- * destination Tooie's Spiral Mountain at the way out of its ruined Lair, in Tooie's numbering (the Tooie
- * side's DUALBOOT_DOOR_* in dualboot.h). */
+/* The hub door (contract 4; BKBT.md, "The hub door"). Tooie's Spiral Mountain entrance to its ruined Lair
+ * starts this game with the destination BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE
+ * and the link of the Tooie file at the door: the game boots into the file select, which chooses the save of
+ * that link out of sight and starts it in the Lair. In a game started so, the Lair's way out to Spiral
+ * Mountain saves and returns to Tooie with the destination Tooie's Spiral Mountain at the way out of its
+ * ruined Lair, in Tooie's numbering (the Tooie side's DUALBOOT_DOOR_* in dualboot.h), and the save's link. */
 #define BKBT_DEST_TAG 0x44530000          /* 'DS' in the high half; the map in the low */
 #define BKBT_DOOR_TOOIE_MAP  0x0AF        /* Tooie's BT_MAP_SM */
 #define BKBT_DOOR_TOOIE_EXIT 2
 bool bkbt_doorArrival(void);  /* this boot came through the hub door and its game has not started yet */
 void bkbt_doorArrived(void);  /* the file select started it */
 bool bkbt_doorOut(void);      /* the Lair's exit to Spiral Mountain: TRUE if it leads to Tooie instead */
+/* The game to play at a door arrival, by the owner's order (2026-11-02): the save of the Tooie file's link;
+ * else an unlinked save of the committed seed, which the link adopts; else an empty file; else a save whose
+ * link no Tooie file holds any more, erased here for a new game. -1 when none is left (the player chooses).
+ * Only with the client's seed committed. src/core1/code_0.c */
+s32 bkbt_doorChoose(void);
+u32 bkbt_doorLink(void);      /* the Tooie file's link this arrival came with, 0 for none */
+/* The curtain (src/core1/code_0.c): from the hub door into this game until its destination's map, and from
+ * the Lair's way out until the return, the screen is black (the file select's and the transitions'
+ * osViBlack(0) wait for it) and the sound silent (every audio buffer is zeroed before the audio interface
+ * plays it, bkbt_silence in src/core1/code_1D00.c's audio frame). */
+bool bkbt_curtainUp(void);
+void bkbt_curtainLift(void);  /* the player has to choose: the screen and the sound come back at once */
+void bkbt_viBlack(bool black); /* the game's own osViBlack calls (the file select's, the transitions'), held black behind the curtain */
+void bkbt_silence(void *buffer, u32 bytes);
 
 /* The save device of the dual-boot image is 32 KiB of SRAM, shared with the Tooie hack, and this game's
  * save is BKBT_SRAM_BYTES of it (src/core1/eeprom.c), from the linker symbol bkbt_sram_offset on
@@ -366,5 +382,11 @@ extern u32 bkbt_file_seed;
  * during play, the mid-session reloads (Bottles' Bonus, the parade, the ending) and clearScoreStates
  * cannot change the seed a save is bound to. */
 extern u32 bkbt_playing_seed;
+
+/* The link of the game being played to its Tooie file (the hub door, contract 4): loaded with the save it
+ * was chosen from (bkbt_saveData_loadAP; 0 for a new game or an unlinked save), set to the Tooie file's link
+ * when a hub door arrival chooses the game, saved with it by saveData_create (SaveData.link) and handed back
+ * to Tooie with the return through the door. */
+extern u32 bkbt_playing_link;
 
 #endif
