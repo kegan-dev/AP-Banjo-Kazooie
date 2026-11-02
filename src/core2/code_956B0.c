@@ -1340,6 +1340,12 @@ void warp_lairEnterMMLobbyFromSMLevel(s32 arg0, s32 arg1) {
 }
 
 void warp_smExitLair(s32 arg0, s32 arg1) {
+#if BKBT
+    /* The hub door: in a game it started, the way out leads back to Tooie (src/core1/code_0.c) */
+    if (bkbt_doorOut()) {
+        return;
+    }
+#endif
     _func_8031CC8C(arg0, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_13_LAIR_ENTRANCE);
 }
 

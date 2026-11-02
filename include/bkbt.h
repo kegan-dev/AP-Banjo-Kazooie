@@ -7,10 +7,10 @@
 /* BKBT=1 only (BKBT.md). What this ROM shares with the dual-boot image it can be part of, and the hooks
  * the game calls. A ROM started by itself finds none of it and behaves like the plain game.
  *
- * The handoff block mirrors hack/bt/n64/src/dualboot.h in the BKBT repository (dual-boot contract 2):
- * keep the two in step. The Tooie hack and its launcher own the layout. This side uses the four words
- * below and stores into three of them: it reads the token and the payload address and zeroes both, counts
- * the countdown down, and only reads the flags.
+ * The handoff block mirrors hack/bt/n64/src/dualboot.h in the BKBT repository (dual-boot contract 3):
+ * keep the two in step. The Tooie hack and its launcher own the layout. This side uses the six words
+ * below: it reads the token, the payload address and the destination and zeroes them, counts the
+ * countdown down, only reads the flags, and writes the destination of its return.
  *
  * This side accesses the block through KSEG1 only. The launcher that returns to Tooie writes the block
  * uncached and then flushes the caches: a line of the block left dirty in this game's data cache would be
@@ -19,6 +19,8 @@
 #define BKBT_HANDOFF ((volatile u32 *) 0xA05FFF00) /* dualboot.h DUALBOOT_HANDOFF, 0x805FFF00 through KSEG1 */
 
 /* Word indices into the block (byte offset / 4), from the table in dualboot.h. */
+#define BKBT_HANDOFF_DEST_MAP  6  /* +0x18: BKBT_DEST_TAG | the map to arrive at in the game started, 0 = none (contract 3) */
+#define BKBT_HANDOFF_DEST_EXIT 7  /* +0x1C: the destination's entrance; both written on every launch, zeroed by the game started */
 #define BKBT_HANDOFF_TOKEN     8  /* +0x20: launch token, written on every launch of this game; bkbt_init zeroes it */
 #define BKBT_HANDOFF_PAYLOAD   9  /* +0x24: KSEG0 address of the payload header loaded in this launch, 0 if none; bkbt_init zeroes it */
 #define BKBT_HANDOFF_COUNTDOWN 10 /* +0x28: main-loop iterations before the game returns by itself, 0 = stay (tests) */
@@ -42,6 +44,20 @@ extern u8 bkbt_contract[];
 #define BKBT_PAYLOAD_RAM_END   0x80800000
 
 #define BKBT_FLAG_CHORD_ANYWHERE 0x00000001 /* the chord also works outside the front end */
+#define BKBT_FLAG_DOOR_TEST      0x00000002 /* tests: the countdown counts in the Lair's lobby, and then takes its exit */
+
+/* The hub door (contract 3; BKBT.md, "The hub door"). Tooie's Spiral Mountain entrance to its ruined Lair
+ * starts this game with the destination BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE:
+ * the game boots into the file select, chooses the file of the client's seed and starts it in the Lair.
+ * In a game started so, the Lair's way out to Spiral Mountain saves and returns to Tooie with the
+ * destination Tooie's Spiral Mountain at the way out of its ruined Lair, in Tooie's numbering (the Tooie
+ * side's DUALBOOT_DOOR_* in dualboot.h). */
+#define BKBT_DEST_TAG 0x44530000          /* 'DS' in the high half; the map in the low */
+#define BKBT_DOOR_TOOIE_MAP  0x0AF        /* Tooie's BT_MAP_SM */
+#define BKBT_DOOR_TOOIE_EXIT 2
+bool bkbt_doorArrival(void);  /* this boot came through the hub door and its game has not started yet */
+void bkbt_doorArrived(void);  /* the file select started it */
+bool bkbt_doorOut(void);      /* the Lair's exit to Spiral Mountain: TRUE if it leads to Tooie instead */
 
 /* The save device of the dual-boot image is 32 KiB of SRAM, shared with the Tooie hack, and this game's
  * save is BKBT_SRAM_BYTES of it (src/core1/eeprom.c), from the linker symbol bkbt_sram_offset on

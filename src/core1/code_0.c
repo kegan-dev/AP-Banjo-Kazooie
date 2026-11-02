@@ -160,6 +160,9 @@ static bool sBkbtLaunched = FALSE;            /* this game was started by the la
 static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
 static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller; call it through bkbt_return */
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
+static bool sBkbtDoorArrival = FALSE;         /* the hub door brought this boot, and its game has not started yet */
+static bool sBkbtDoorSession = FALSE;         /* the hub door brought this boot: the Lair's exit leads to Tooie */
+static bool sBkbtDoorLeaving = FALSE;         /* the Lair's exit was taken: save and return on the next iteration */
 
 /* The Archipelago settings (include/bkbt.h): the client writes them, the game only reads them. All 0, so
  * at every boot they read as not written yet; the anchor points here from the first instruction. */
@@ -882,6 +885,8 @@ void bkbt_init(void) {
     volatile u32 *handoff = BKBT_HANDOFF;
     u32 token;
     u32 payload;
+    u32 dest_map;
+    u32 dest_exit;
     u32 *header;
 
     /* The block is above 4 MiB: without the Expansion Pak there is nothing there to read or to zero.
@@ -892,8 +897,12 @@ void bkbt_init(void) {
 
     token = handoff[BKBT_HANDOFF_TOKEN];
     payload = handoff[BKBT_HANDOFF_PAYLOAD];
+    dest_map = handoff[BKBT_HANDOFF_DEST_MAP];
+    dest_exit = handoff[BKBT_HANDOFF_DEST_EXIT];
     handoff[BKBT_HANDOFF_TOKEN] = 0;
     handoff[BKBT_HANDOFF_PAYLOAD] = 0;
+    handoff[BKBT_HANDOFF_DEST_MAP] = 0;
+    handoff[BKBT_HANDOFF_DEST_EXIT] = 0;
     *BKBT_AP_ANCHOR = (u32) &bkbt_ap_anchor;
 
     if (token != (BKBT_TOKEN | (u32) bkbt_contract)) {
@@ -901,6 +910,11 @@ void bkbt_init(void) {
     }
     sBkbtLaunched = TRUE;
     sBkbtFlags = handoff[BKBT_HANDOFF_FLAGS];
+    /* The hub door's destination is the only one this game knows (include/bkbt.h) */
+    if (dest_map == (BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY) && dest_exit == WARP_GL_MM_LOBBY_12_ENTRANCE) {
+        sBkbtDoorArrival = TRUE;
+        sBkbtDoorSession = TRUE;
+    }
 
     /* A launcher that loaded no payload passes 0. The header has to lie inside the Expansion Pak's half
      * of RAM as a whole, on a word boundary, and belong to this contract. */
@@ -944,9 +958,43 @@ static bool bkbt_chordAllowed(void) {
  * would point into this game's RAM while no game is running, and a client writing through it then would
  * write into memory the return launcher and Tooie are about to reuse. Tooie's launcher withdraws its
  * anchor the same way before it starts this game (hack/bt/n64/asm/dualboot.asm). */
-static void bkbt_return(void) {
+void gameSelect_saveAndExit(void);      /* src/core2/ch/gameSelect.c */
+void warp_smExitLair(s32 arg0, s32 arg1); /* src/core2/code_956B0.c */
+
+static void bkbt_returnTo(u32 dest_map, u32 dest_exit) {
+    volatile u32 *handoff = BKBT_HANDOFF;
+
+    /* the destination, on every return (contract 3): Tooie reads it only with the magic the return
+     * launcher writes */
+    handoff[BKBT_HANDOFF_DEST_MAP] = dest_map != 0 ? (BKBT_DEST_TAG | dest_map) : 0;
+    handoff[BKBT_HANDOFF_DEST_EXIT] = dest_map != 0 ? dest_exit : 0;
     *BKBT_AP_ANCHOR = 0;
     sBkbtReturnEntry();
+}
+
+static void bkbt_return(void) {
+    bkbt_returnTo(0, 0);
+}
+
+/* The hub door (include/bkbt.h). The file select (src/core2/ch/gameSelect.c) asks bkbt_doorArrival whether to
+ * choose the file itself and start it in the Lair, and says bkbt_doorArrived when it has. */
+bool bkbt_doorArrival(void) {
+    return sBkbtDoorArrival;
+}
+
+void bkbt_doorArrived(void) {
+    sBkbtDoorArrival = FALSE;
+}
+
+/* warp_smExitLair (src/core2/code_956B0.c) asks this first: in a game the hub door started, the Lair's way out
+ * to Spiral Mountain leads back to Tooie, from the next main-loop iteration on (bkbt_frame), and the warp
+ * does nothing. A game started from the front end keeps its own Spiral Mountain. */
+bool bkbt_doorOut(void) {
+    if (!sBkbtDoorSession || sBkbtReturnEntry == NULL) {
+        return FALSE;
+    }
+    sBkbtDoorLeaving = TRUE;
+    return TRUE;
 }
 
 /* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.
@@ -992,15 +1040,31 @@ void bkbt_frame(void) {
         return;
     }
 
+    /* The hub door out (bkbt_doorOut): the game saved as when it leaves a level for the file select
+     * (gameSelect_saveAndExit saves in the Lair, level 6, and nowhere a save would be wrong), then back to
+     * Tooie's Spiral Mountain. The save is synchronous (src/core1/eeprom.c). */
+    if (sBkbtDoorLeaving) {
+        sBkbtDoorLeaving = FALSE;
+        gameSelect_saveAndExit();
+        bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT);
+    }
+
     /* Tests: the Tooie hack leaves a number of iterations after which the game goes back by itself.
      * The count is stored before the call, which does not come back: the word has to read 0, stay, once
-     * it has run out, whatever looks at it next. */
+     * it has run out, whatever looks at it next. With BKBT_FLAG_DOOR_TEST it counts only in the Lair's
+     * lobby during play, and then the game takes the lobby's way out, as if Banjo had walked out. */
     countdown = handoff[BKBT_HANDOFF_COUNTDOWN];
-    if (countdown != 0) {
+    if (countdown != 0 && !(sBkbtFlags & BKBT_FLAG_DOOR_TEST)) {
         countdown--;
         handoff[BKBT_HANDOFF_COUNTDOWN] = countdown;
         if (countdown == 0) {
             bkbt_return();
+        }
+    } else if (countdown != 0 && gsworld_getMap() == MAP_69_GL_MM_LOBBY && getGameMode() == GAME_MODE_3_NORMAL) {
+        countdown--;
+        handoff[BKBT_HANDOFF_COUNTDOWN] = countdown;
+        if (countdown == 0) {
+            warp_smExitLair(0, 0);
         }
     }
 
@@ -1020,7 +1084,12 @@ void core1_init(void) {
      osTvType = OS_TV_TYPE_PAL;
 #endif
     ucode_load();
+#if BKBT
+    /* Through the hub door: straight into the file select, which chooses the file (bkbt_doorArrival) */
+    setBootMap(bkbt_doorArrival() ? MAP_91_FILE_SELECT : getDefaultBootMap());
+#else
     setBootMap(getDefaultBootMap());
+#endif
     rarezip_init(); //initialize decompressor's huft table
     viMgr_init();
     overlayManager_loadCore2();

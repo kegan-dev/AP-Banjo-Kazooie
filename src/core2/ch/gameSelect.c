@@ -14,6 +14,7 @@
 
 #if BKBT
 #include "bkbt.h"
+#include "save.h"
 #endif
 
 void debugScoreStates(void);
@@ -411,6 +412,37 @@ void gameSelect_update(Actor *this) {
     controller_copySideButtons(0, side_buttons);
     controller_copyFaceButtons(0, face_buttons);
     controller_copyJoystick(0, &joystick);
+#if BKBT
+    /* The hub door (include/bkbt.h): once the client has committed the seed, the file whose saved seed is the
+     * committed one, else the first empty one, is chosen as if by the player: shown first
+     * (setGameInformationZoombox, which loads it for the file select and so sets bkbt_file_seed), then A on
+     * this actor's next update, which then takes the path of a press, the seed check included. With every
+     * file another seed's, the player chooses. */
+    if (bkbt_doorArrival() && !func_8038AAB0() && this->state == GAME_SELECT_IDLE && bkbt_apSettingsCommitted()) {
+        extern SaveData gameFile_saveData[4];      /* src/core2/code_B5E00.c */
+        extern s8 gameFile_GameIdToFileIdMap[4];
+        s32 g;
+        s32 target = -1;
+
+        for (g = 0; g < 3 && target < 0; g++) {
+            if (gameFile_isNotEmpty(g) && gameFile_saveData[gameFile_GameIdToFileIdMap[g]].seed == bkbt_ap_settings.seed) {
+                target = g;
+            }
+        }
+        for (g = 0; g < 3 && target < 0; g++) {
+            if (!gameFile_isNotEmpty(g)) {
+                target = g;
+            }
+        }
+        if (target >= 0 && target != game_number) {
+            previousGameNumber = game_number;
+            setGameInformationZoombox(target);
+            gameSelectCameraDelta = 0.0f;
+        } else if (target >= 0) {
+            face_buttons[FACE_BUTTON(BUTTON_A)] = 1;
+        }
+    }
+#endif
 
     switch (this->state) {
         case GAME_SELECT_IDLE:
@@ -504,8 +536,17 @@ void gameSelect_update(Actor *this) {
                          * keeps. The only difference is the honeycomb pop-up on
                          * arrival, which isn't saved, and a save loaded in Spiral
                          * Mountain doesn't show it either.
+                         *
+                         * Through the hub door (include/bkbt.h) a new game starts in
+                         * the Lair, as a loaded one does below, with the Lair's
+                         * cutscene, which warp_lairEnterLairFromSMLevel plays while
+                         * FILEPROG_BD is not set.
                          */
-                        if (bkbt_apSettings()->skip_intro) {
+                        if (bkbt_doorArrival()) {
+                            bkbt_doorArrived();
+                            timedFunc_set_2(0.0f, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+                            timedFunc_set_1(0.0f, (GenFunction_1) gsworld_setEnableUpdate, 1);
+                        } else if (bkbt_apSettings()->skip_intro) {
                             timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_12_FROM_HOUSE, 1);
                         } else {
                             timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_85_CS_SPIRAL_MOUNTAIN_3, 0, 1);
@@ -523,6 +564,13 @@ void gameSelect_update(Actor *this) {
                         }
 
                         // If player has gone into the lair, spawn them there
+#if BKBT
+                        /* and always through the hub door (include/bkbt.h) */
+                        if (bkbt_doorArrival()) {
+                            bkbt_doorArrived();
+                            timedFunc_set_2(function_time, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+                        } else
+#endif
                         if (chmole_learnedAllSpiralMountainAbilities() && fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE)) {
                             timedFunc_set_2(function_time, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
                         } else { // Otherwise, they're still in Spiral Mountain
