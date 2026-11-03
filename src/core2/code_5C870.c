@@ -5,6 +5,9 @@
 
 #include "core2/gc/transition.h"
 #include "time.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void print_updateBoldLetterFontDelayedFreeing(void);
 extern void func_802FA0F8(void);
@@ -256,6 +259,11 @@ void game_changeMap(enum game_mode_e mode){
     s32 prev_mode;
 
     core1_15B30_sendMesg3ToRenderThread();
+#if BKBT
+    /* The hub door: the Lair's way out goes back to Tooie here, once its fade has played (src/core1/code_0.c).
+     * Does not come back when it does. */
+    bkbt_doorMapChange(sGameState.map, sGameState.exit);
+#endif
     sp34 = sGameState.reset_level;
     sp30 = sGameState.map_transition;
     map = sGameState.map;

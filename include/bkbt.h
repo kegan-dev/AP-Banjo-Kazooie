@@ -59,7 +59,9 @@ extern u8 bkbt_contract[];
 #define BKBT_DOOR_TOOIE_EXIT 2
 bool bkbt_doorArrival(void);  /* this boot came through the hub door and its game has not started yet */
 void bkbt_doorArrived(void);  /* the file select started it */
-bool bkbt_doorOut(void);      /* the Lair's exit to Spiral Mountain: TRUE if it leads to Tooie instead */
+/* game_changeMap, once a map change's fade has played: the Lair's way out to Spiral Mountain in a game the hub
+ * door started saves and goes back to Tooie, and then does not return. src/core1/code_0.c */
+void bkbt_doorMapChange(s32 map, s32 exit);
 /* The game to play at a door arrival, by the owner's order (2026-11-02): the save of the Tooie file's link;
  * else an unlinked save of the committed seed, which the link adopts; else an empty file; else a save whose
  * link no Tooie file holds any more, erased here for a new game. -1 when none is left (the player chooses).

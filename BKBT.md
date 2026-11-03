@@ -1680,17 +1680,24 @@ ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_
   select's and the transitions' `osViBlack` calls go through `bkbt_viBlack`, which holds black and keeps what
   the game asked for, and `audioManager_handleFrameMsg` (`src/core1/code_1D00.c`) zeroes every buffer before
   `osAiSetNextBuffer` (`bkbt_silence`: through the data cache, then `osWritebackDCache`, as libultra prepares a
-  buffer for a DMA; not through KSEG1, which upset mupen64plus's recompiler on the Tooie side). Raised by a door arrival and by `bkbt_doorOut`. Lifted by
+  buffer for a DMA; not through KSEG1, which upset mupen64plus's recompiler on the Tooie side). Raised by a door arrival and by `bkbt_doorMapChange`. Lifted by
   `bkbt_frame` once the game has started and the map is not the file select, or after ten seconds without a
   committed seed, and by `bkbt_curtainLift` when there is no game to choose; the lifting gives the screen what
   the game last asked for (the Lair's cutscene has no transition that shows it: from the file select retail
   shows the new map only because the file select's last call did).
-- **The way out.** `warp_smExitLair` (`src/core2/code_956B0.c`) first asks `bkbt_doorOut()`: in a door
-  session with a return entry it marks the door taken and the warp does nothing. The next `bkbt_frame` calls
-  `gameSelect_saveAndExit()` (it saves for levels 1..12, the Lair being 6, synchronously through
-  `src/core1/eeprom.c`) and `bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT)`, Tooie's Spiral
-  Mountain at exit 2, with the save's link. The curtain falls at `bkbt_doorOut`. A session started from the
-  front end keeps BK's own Spiral Mountain. The chord and the countdown return with no destination and no
+- **The way out** (since 2026-11-02 after its transition, the owner's wish; until then the warp did nothing and
+  the next `bkbt_frame` cut to Tooie at once). `warp_smExitLair` (`src/core2/code_956B0.c`) runs as in retail:
+  it asks for Spiral Mountain's exit `0x13` (`WARP_SM_13_LAIR_ENTRANCE`, which only that warp asks for; `0x12` is
+  a new game's start), the Lair's music fades (`func_8031CB50`) and the lobby's fade-out plays, the jiggy wipe
+  (0.9 s with the out jingle, `src/core2/gc/transition.c`'s default entry), then its black loading frame twice.
+  Only then does `game_update` hand the request to `game_changeMap` (`src/core2/code_5C870.c`), whose first
+  step after its render sync is `bkbt_doorMapChange(sGameState.map, sGameState.exit)`: in a door session with a
+  return entry, for that destination from `MAP_69`, it raises the curtain (the screen is black already; it
+  mutes the jingle's tail), calls `gameSelect_saveAndExit()` (it saves for levels 1..12, the Lair being 6,
+  synchronously through `src/core1/eeprom.c`; retail's level change makes the same save a little later in the
+  same function, `func_8030AFD8`) and `bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT)`, Tooie's Spiral
+  Mountain at exit 2, with the save's link, and does not come back. Every other map change loads as in retail.
+  A session started from the front end keeps BK's own Spiral Mountain. The chord and the countdown return with no destination and no
   link (`bkbt_return` is `bkbt_returnTo(0, 0)`).
 - **The test.** With `BKBT_FLAG_DOOR_TEST` the countdown counts only in `MAP_69` in game mode 3 and then calls
   `warp_smExitLair(0, 0)` as if Banjo had walked out.

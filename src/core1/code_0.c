@@ -163,7 +163,6 @@ static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
 static bool sBkbtDoorArrival = FALSE;         /* the hub door brought this boot, and its game has not started yet */
 static bool sBkbtDoorSession = FALSE;         /* the hub door brought this boot: the Lair's exit leads to Tooie */
-static bool sBkbtDoorLeaving = FALSE;         /* the Lair's exit was taken: save and return on the next iteration */
 static u32 sBkbtDoorLink = 0;                 /* the link of the Tooie file the hub door brought (contract 4) */
 static u32 sBkbtDoorFileLinks[3] = {0, 0, 0}; /* the links Tooie's three files hold */
 static bool sBkbtCurtain = FALSE;             /* the screen black and the sound silent (bkbt_curtainUp) */
@@ -1017,7 +1016,7 @@ u32 bkbt_doorLink(void) {
     return sBkbtDoorLink;
 }
 
-/* The curtain (include/bkbt.h). Raised by bkbt_init with the hub door's arrival and by bkbt_doorOut; lifted by
+/* The curtain (include/bkbt.h). Raised by bkbt_init with the hub door's arrival and by bkbt_doorMapChange; lifted by
  * bkbt_frame once the destination's map is there, or by bkbt_curtainLift when the player has to choose. The
  * game's own osViBlack calls (the file select's every frame, a transition's) go through bkbt_viBlack, which
  * holds the screen black while the curtain is up and remembers what the game asked for: the lifting gives it
@@ -1102,18 +1101,28 @@ s32 bkbt_doorChoose(void) {
     return -1;
 }
 
-/* warp_smExitLair (src/core2/code_956B0.c) asks this first: in a game the hub door started, the Lair's way out
- * to Spiral Mountain leads back to Tooie, from the next main-loop iteration on (bkbt_frame), and the warp
- * does nothing. A game started from the front end keeps its own Spiral Mountain. The curtain falls at once:
- * the save and the return that follow show nothing and play nothing. */
-bool bkbt_doorOut(void) {
+/* game_changeMap (src/core2/code_5C870.c) asks this first, right after its render sync: in a game the hub door
+ * started, the Lair's way out to Spiral Mountain leads back to Tooie instead, and this does not come back. Banjo
+ * has left as in retail (the owner's wish, 2026-11-02): warp_smExitLair asked for Spiral Mountain's exit 0x13,
+ * which only that warp asks for (0x12 is a new game's start), the Lair's music faded, the jiggy wipe played for
+ * 0.9 s and its black loading frame has been drawn twice; game_update hands the request over only then
+ * (gctransition_8030BDC0). So the screen is black, the render thread idle and the game still the lobby's (map
+ * 0x69, level 6, game mode 3), the state the save of a level change is made in (game_loadMap's func_8030AFD8,
+ * which calls gameSelect_saveAndExit), which this makes instead, synchronously (src/core1/eeprom.c), before the
+ * return. The curtain falls first: the screen is black already, and it mutes the out jingle's tail. Any other
+ * map change, a game started from the front end, and a map change whose destination something changed during
+ * the fade, load as in retail. */
+void bkbt_doorMapChange(s32 map, s32 exit) {
     if (!sBkbtDoorSession || sBkbtReturnEntry == NULL) {
-        return FALSE;
+        return;
     }
-    sBkbtDoorLeaving = TRUE;
+    if (map != MAP_1_SM_SPIRAL_MOUNTAIN || exit != WARP_SM_13_LAIR_ENTRANCE || gsworld_getMap() != MAP_69_GL_MM_LOBBY) {
+        return;
+    }
     sBkbtCurtain = TRUE;
     osViBlack(TRUE);
-    return TRUE;
+    gameSelect_saveAndExit();
+    bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT);
 }
 
 /* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.
@@ -1156,9 +1165,9 @@ void bkbt_frame(void) {
 
     /* The curtain of a hub door arrival (bkbt_curtainUp): lifted once the file select has started the game and
      * the destination's map is there, which then shows as the game asks (bkbt_viBlack); or after ten seconds
-     * without a client's seed, so that the player sees why nothing happens. The curtain of the way out stays
-     * up until the return. */
-    if (sBkbtCurtain && !sBkbtDoorLeaving) {
+     * without a client's seed, so that the player sees why nothing happens. The way out's curtain falls only
+     * as the game returns (bkbt_doorMapChange). */
+    if (sBkbtCurtain) {
         enum map_e map = gsworld_getMap();
 
         if (!sBkbtDoorArrival && map != 0 && map != MAP_91_FILE_SELECT) {
@@ -1175,15 +1184,6 @@ void bkbt_frame(void) {
     /* Without an entry the block is not looked at: there may be no RAM where it is. */
     if (sBkbtReturnEntry == NULL) {
         return;
-    }
-
-    /* The hub door out (bkbt_doorOut): the game saved as when it leaves a level for the file select
-     * (gameSelect_saveAndExit saves in the Lair, level 6, and nowhere a save would be wrong), then back to
-     * Tooie's Spiral Mountain. The save is synchronous (src/core1/eeprom.c). */
-    if (sBkbtDoorLeaving) {
-        sBkbtDoorLeaving = FALSE;
-        gameSelect_saveAndExit();
-        bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT);
     }
 
     /* Tests: the Tooie hack leaves a number of iterations after which the game goes back by itself.
