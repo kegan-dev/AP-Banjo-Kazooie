@@ -167,6 +167,11 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     `src/core2/code_41FB0.c`, `src/core2/code_9A740.c`, `src/core2/code_B5040.c`, `src/core2/code_B5E00.c`,
     `src/core2/code_956B0.c`, `src/core2/code_BEF20.c` ("Notes kept, and notes as Archipelago locations"
     below).
+21. **The Lair's cutscene and the game-over cutscene** (2026-11-04, the owner's wishes): the first entry into
+    the Lair goes straight to the lobby with the setting `skip_lair_cutscene` (layout 0.12.0: the settings'
+    `+0x06` from their padding), and Save and Quit and the last life go to the logos without the game-over
+    cutscene. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/code_956B0.c`, `src/core2/gc/pauseMenu.c`,
+    `src/core2/code_14420.c` ("The Lair's cutscene and the game-over cutscene" below).
 
 ## The frame hook
 
@@ -690,7 +695,9 @@ rest, are the owner's decisions of 2026-10-17; the seed bound to the save, and n
   |---|---|---|
   | `+0x00` | `u32 seed` | the generated game's seed; written last; 0 = not written since this boot |
   | `+0x04` | `u8 skip_intro` | 1: a new game skips the intro, 0: it plays it ("The new-game intro") |
-  | `+0x05` | `u8 padding[3]` | 0 |
+  | `+0x05` | `u8 notesanity` | since layout 0.11.0 ("Notes kept, and notes as Archipelago locations"); padding before |
+  | `+0x06` | `u8 skip_lair_cutscene` | since layout 0.12.0: 1, the first entry into the Lair goes straight to the lobby; 0, it plays the cutscene ("The Lair's cutscene and the game-over cutscene"); padding before |
+  | `+0x07` | `u8 padding[1]` | 0 |
 
   With the pointer the anchor grew to 16 bytes and its version to 0.2.0 (`BKBT_AP_VERSION_MINOR`,
   `:142`, 3 since the items, 4 since the locations): a ROM whose anchor says 0.1.0 or size 12 has no
@@ -1668,7 +1675,8 @@ ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_
   game's next update starts it as A and `GAME_SELECT_STARTING` do for an arrival, without the press, its
   sounds, its animation or the "silly" start: `bkbt_playing_seed`, `bkbt_gameFile_loadAP`,
   `bkbt_playing_link = bkbt_doorLink()`, `bkbt_doorArrived()`, `chBottlesBonus_resetCompleted()`,
-  `warp_lairEnterLairFromSMLevel` (the Lair's cutscene, map `0x82`, while `FILEPROG_BD` is not set) and
+  `warp_lairEnterLairFromSMLevel` (the Lair's cutscene, map `0x82`, while `FILEPROG_BD` is not set, unless the
+  setting `skip_lair_cutscene` skips it: "The Lair's cutscene and the game-over cutscene") and
   `gsworld_setEnableUpdate(1)`, then `GAME_SELECT_DONE`. With -1 the curtain lifts and the player chooses;
   the A path gives a game chosen so the door's link too, and `GAME_SELECT_STARTING` sends it to the Lair
   as before. A new game skips Spiral Mountain, whose moves come as items.
@@ -1709,6 +1717,34 @@ through KSEG1 only: in the build of 2026-10-31 `code_0.c.o` forms it with `lui 0
 `lui` of `0x805F` or `0x8060`; `gameSelect.c.o` and `code_956B0.c.o` do not touch it. The owner's hand test
 of the image passed on ares v148 on 2026-11-01, twice both ways (the BKBT repository's `hack/DUALBOOT.md`,
 "Status"). Not checked: a console.
+
+## The Lair's cutscene and the game-over cutscene
+
+Two cutscenes of Gruntilda's machine room are skipped (2026-11-04, the owner's wishes; under `#if BKBT`, so the
+matching build keeps both):
+
+- **The first entry into the Lair** (map `0x82`, "Intro - Grunties Lair 3 - Machine 1"), by the Archipelago
+  setting `skip_lair_cutscene`, the settings' `+0x06` (layout 0.12.0, from their padding), on in the hack's
+  defaults (`sBkbtApDefaults`) and read live through `bkbt_apSettings()`, as `skip_intro` is. Every first
+  entry goes through `warp_lairEnterLairFromSMLevel` (`src/core2/code_956B0.c`): the hub door's new games and
+  loaded ones (`src/core2/ch/gameSelect.c`) and the way in from Spiral Mountain. While `FILEPROG_BD` is unset
+  and the setting is on it sets the flag and warps to `MAP_69` at `WARP_GL_MM_LOBBY_12_ENTRANCE`, where the
+  cutscene ends (`cutscenetrigger_update`) and with the flag it leaves; otherwise retail's way. A client of
+  layout 0.11 never writes the byte, so its games play the cutscene.
+- **The game-over cutscene** (map `0x83`) on Save and Quit and on the last life, always. Retail plays it once
+  `FILEPROG_BD` is set and Furnace Fun is not done; otherwise it takes its other way, which the hack now
+  always takes: Save and Quit sets `PAUSE_STATE_14_EXIT_GAME` after its save (`src/core2/gc/pauseMenu.c`), the
+  last life `func_8029B62C`'s first branch (`src/core2/code_14420.c`), both the music faded and the opening
+  logos (`MAP_1F`) five seconds on. The game-over save is the level change's on the way (`game_loadMap`'s
+  `func_8030AFD8(1)`, `src/core2/gc/section.c`), not the cutscene's, so it is made either way.
+
+Checked on mupen64plus with the BKBT repository's `tools/dualboot_door_check.py` (a new game's first trip
+straight into the lobby; the scenario `lair-cutscene`, with the setting 0, through the cutscene) and
+`tools/bk_exit_check.py` (Save and Quit with `FILEPROG_BD` set: the logos, no map `0x83`, the save holding the
+game; a control build with the pause menu's change compiled out played the cutscene). The last life is not
+reached headlessly. The owner tried it by hand on Project64 3.0.1 on 2026-11-04, in the image with the combined
+slot: the lobby with no cutscene through the hub door, Save and Quit and the last life to the logos with the game
+saved, and with the setting turned off the cutscene once.
 
 ## Rules for new code
 

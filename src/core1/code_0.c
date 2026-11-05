@@ -175,7 +175,8 @@ BkbtApSettings bkbt_ap_settings = {
     0,
     0,
     0,
-    {0, 0}
+    0,
+    {0}
 };
 
 u32 bkbt_file_seed = 0;
@@ -195,7 +196,8 @@ static const BkbtApSettings sBkbtApDefaults = {
     0,
     TRUE,
     FALSE,
-    {0, 0}
+    TRUE,   /* skip_lair_cutscene (since layout 0.12.0, the owner's default of 2026-11-04) */
+    {0}
 };
 
 /* The settings the game plays by: the client's once committed, the defaults until then. Game code reads

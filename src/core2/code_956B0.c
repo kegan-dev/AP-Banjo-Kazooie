@@ -1471,6 +1471,15 @@ void warp_lairEnterLairFromSMLevel(s32 arg0, s32 arg1) {
     if (fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE) != 0) {
         // MM Lobby
         _func_8031CC8C(arg0, MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE);
+#if BKBT
+    } else if (bkbt_apSettings()->skip_lair_cutscene) {
+        /* The Archipelago setting skip_lair_cutscene (include/bkbt.h, since layout 0.12.0, on in the hack's
+         * defaults): the first entry goes where the cutscene ends (cutscenetrigger_update, MAP_82 to the
+         * lobby's entrance 0x12), with the flag the cutscene leaves. Every first entry comes through here:
+         * the hub door's games (src/core2/ch/gameSelect.c) and the way in from Spiral Mountain. */
+        fileProgressFlag_set(FILEPROG_BD_ENTER_LAIR_CUTSCENE, 1);
+        _func_8031CC8C(arg0, MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE);
+#endif
     } else {
         fileProgressFlag_set(FILEPROG_BD_ENTER_LAIR_CUTSCENE, 1);
         // Enter Lair Cutscene

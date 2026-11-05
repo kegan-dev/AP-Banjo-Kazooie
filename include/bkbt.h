@@ -124,7 +124,9 @@ typedef struct {
     u8 skip_intro;  /* +0x04: 1 = a new game skips the intro, 0 = it plays it */
     u8 notesanity;  /* +0x05: 1 = the notes are Archipelago items: a note picked up is only a check, and the
                      * game's note totals are the Notes received (since 0.11.0; latched when a game is chosen) */
-    u8 padding[2];  /* +0x06: 0. Named, so that the size the u32 rounds the struct up to is visible */
+    u8 skip_lair_cutscene; /* +0x06: 1 = the first entry into the Lair goes straight to the lobby, 0 = it plays
+                     * Gruntilda's machine-room cutscene (since 0.12.0; read live, as skip_intro) */
+    u8 padding[1];  /* +0x07: 0. Named, so that the size the u32 rounds the struct up to is visible */
 } BkbtApSettings;   /* 8 bytes */
 
 extern BkbtApSettings bkbt_ap_settings;
@@ -351,7 +353,7 @@ bool bkbt_apNotesKept(void);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 11
+#define BKBT_AP_VERSION_MINOR 12
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything

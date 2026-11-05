@@ -545,7 +545,8 @@ void gameSelect_update(Actor *this) {
                          * Through the hub door (include/bkbt.h) a new game starts in
                          * the Lair, as a loaded one does below, with the Lair's
                          * cutscene, which warp_lairEnterLairFromSMLevel plays while
-                         * FILEPROG_BD is not set.
+                         * FILEPROG_BD is not set, unless the setting
+                         * skip_lair_cutscene skips it (since layout 0.12.0).
                          */
                         if (bkbt_doorArrival()) {
                             bkbt_doorArrived();

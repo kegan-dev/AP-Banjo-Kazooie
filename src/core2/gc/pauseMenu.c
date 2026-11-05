@@ -1081,6 +1081,11 @@ s32 gcPauseMenu_update(void) {
                     gameSelect_saveAndExit();
                     volatileFlag_set(VOLATILE_FLAG_0_IN_FURNACE_FUN_QUIZ, 0);
 
+#if BKBT
+                    /* No game-over cutscene (MAP_83): the exit retail takes before the Lair and after Furnace
+                     * Fun, the logos five seconds on (PAUSE_STATE_14_EXIT_GAME; the owner's wish, 2026-11-04) */
+                    gcPauseMenu_setState(PAUSE_STATE_14_EXIT_GAME);
+#else
                     if (!fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE) ||
                         fileProgressFlag_get(FILEPROG_A6_FURNACE_FUN_COMPLETE)) {
                         gcPauseMenu_setState(PAUSE_STATE_14_EXIT_GAME);
@@ -1090,6 +1095,7 @@ s32 gcPauseMenu_update(void) {
                         transitionToMap(MAP_83_CS_GAME_OVER_MACHINE_ROOM, 0, 1);
                         gcPauseMenu_setState(PAUSE_STATE_13_EXIT_PAUSE);
                     }
+#endif
                     break;
             }
             break;

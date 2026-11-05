@@ -293,7 +293,14 @@ void func_8029B5EC(void){
 
 void func_8029B62C(void){
     if(item_empty(ITEM_16_LIFE)){
+#if BKBT
+        /* No game-over cutscene (MAP_83) on the last life either: the way retail goes before the Lair and after
+         * Furnace Fun, the logos five seconds on (the owner's wish, 2026-11-04). The save comes at the level
+         * change on the way (func_8030AFD8, src/core2/gc/section.c), not from the cutscene. */
+        if(TRUE){
+#else
         if(!fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE) || fileProgressFlag_get(FILEPROG_A6_FURNACE_FUN_COMPLETE)){
+#endif
             func_8025A430(-1, 0x7D0, 3);
             func_8025A2B0();
             func_802DC528(0, 0);
