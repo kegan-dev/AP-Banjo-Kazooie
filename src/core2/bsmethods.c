@@ -6,6 +6,9 @@
 #include "core2/statetimer.h"
 #include "core2/ba/physics.h"
 #include "core2/snackerctl.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 u8 D_80363820 = 0;
 
@@ -287,6 +290,10 @@ void func_80295C14(void){
     joy_update();//controller_update
     disableInput_set();
     bakey_update();
+#if BKBT
+    /* Quick transform: D-pad left near a door in the Lair (src/core1/code_0.c), with the buttons just read. */
+    bkbt_quickTransform();
+#endif
     bastick_update();
     bainput_update(); //dive_cooldown_update
     bs_updateState();

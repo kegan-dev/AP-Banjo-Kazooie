@@ -263,6 +263,16 @@ void game_changeMap(enum game_mode_e mode){
     /* The hub door: the Lair's way out goes back to Tooie here, once its fade has played (src/core1/code_0.c).
      * Does not come back when it does. */
     bkbt_doorMapChange(sGameState.map, sGameState.exit);
+    /* The exit map: the client may send the change elsewhere (src/core1/code_0.c), before anything below reads it. */
+    {
+        s32 bkbt_map = sGameState.map;
+        s32 bkbt_exit = sGameState.exit;
+
+        if (bkbt_mapChange(mode, sGameState.reset_level, &bkbt_map, &bkbt_exit)) {
+            sGameState.map = bkbt_map;
+            sGameState.exit = bkbt_exit;
+        }
+    }
 #endif
     sp34 = sGameState.reset_level;
     sp30 = sGameState.map_transition;

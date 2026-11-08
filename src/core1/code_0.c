@@ -219,6 +219,10 @@ BkbtApItems bkbt_ap_items = { { 0 } };
  * 0 at every boot. */
 BkbtApLocations bkbt_ap_locations = { { 0 } };
 
+/* The exit map (include/bkbt.h): written by the client, read by the game (bkbt_mapChange), all 0 at every boot,
+ * an empty table. */
+BkbtApExits bkbt_ap_exits = { { { 0 } } };
+
 /* mainLoop iterations on which bkbt_frame copied the items from the client. For the
  * tools that test a ROM: a test that expects items not to be copied proves nothing unless the game is
  * shown to have applied items. Not initialised, unlike the statics above: a tool reaches it through
@@ -877,7 +881,8 @@ BkbtApAnchor bkbt_ap_anchor = {
     BKBT_AP_VERSION_PATCH,
     &bkbt_ap_settings,
     &bkbt_ap_items,
-    &bkbt_ap_locations
+    &bkbt_ap_locations,
+    &bkbt_ap_exits
 };
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
@@ -1125,6 +1130,167 @@ void bkbt_doorMapChange(s32 map, s32 exit) {
     osViBlack(TRUE);
     gameSelect_saveAndExit();
     bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT);
+}
+
+u8 game_getKeepLevelState(void);                    /* src/core2/code_5C870.c: a cutscene trip or Furnace Fun's minigames */
+enum level_e map_getLevel(enum map_e map);          /* src/core2/gc/section.c */
+void player_setTransformation(enum transformation_e xform_id);  /* src/core2/bsStoredState.c: the form the next spawn takes */
+bool player_transform(enum transformation_e xform_id);         /* src/core2/code_7060.c: what Mumbo calls; TRUE when taken */
+bool player_getExitPosition(s32 exitId, s32 position[3]);      /* src/core2/code_7060.c: an exit's marker in the map */
+void func_802D2CB8(void);                           /* src/core2/ch/mumbo.c: re-arms the Lair's detransform barriers */
+enum bsgroup_e player_movementGroup(void);          /* src/core2/code_7060.c */
+enum bswatergroup_e player_getWaterState(void);     /* src/core2/code_7060.c */
+ActorMarker *bacarry_getMarker(void);               /* src/core2/ba/carry.c: what Banjo carries, or NULL */
+int gctransition_8030BDC0(void);                    /* src/core2/gc/transition.c: a transition is taking the map away */
+extern struct1Bs D_8036C560[];                    /* src/core2/gc/pauseMenu.c: each level's way out into the Lair, by
+                                                     * enum level_e - 1 (gcpausemenu_returnToLair) */
+
+/* Map changes the exit map sent elsewhere since boot, for the tools (BKBT.md, "Exports for tools"). */
+u32 bkbt_exits_taken = 0;
+
+/* game_changeMap (src/core2/code_5C870.c) asks this about every map change, after bkbt_doorMapChange and before it
+ * reads the request: the request's map and exit, the game mode it is to play in and whether it resets the level.
+ * Only a change of the normal game, in the normal game, with no level reset, and neither a cutscene trip (keep the
+ * level's state, or VOLATILE_FLAG_21, the way back from one) nor one of Furnace Fun's: that leaves out the demos,
+ * Bottles' Bonus, the parade, Stop 'n' Swop, the trips that show a door or a witch switch (MMM's witch switch comes
+ * back to MMM's own entrance, exit 0x14, from the FP lobby), Furnace Fun and a death, whose respawn resets the
+ * level. Then the first entry of the exit map for this map, the map asked for and its exit (include/bkbt.h) sends it
+ * to its destination, while a client's settings are committed and a game was chosen. And a change between the Lair
+ * and one of the nine worlds, either way, turns Banjo back into himself, as Furnace Fun does (lair/code_5ED0.c), so
+ * that no Mumbo form goes through a door whose world the exit map changed, or comes out of a world into another
+ * lobby, past the Lair's barriers: quick transform (below) gives the Lair's forms back at the doors. */
+bool bkbt_mapChange(s32 mode, s32 reset_level, s32 *map, s32 *exit) {
+    enum level_e from;
+    enum level_e to;
+    bool remapped = FALSE;
+    const BkbtApExit *entry;
+    s32 i;
+
+    if (!bkbt_file_chosen || getGameMode() != GAME_MODE_3_NORMAL || mode != GAME_MODE_3_NORMAL || reset_level ||
+        game_getKeepLevelState() || volatileFlag_get(VOLATILE_FLAG_21)) {
+        return FALSE;
+    }
+    if (bkbt_apSettingsCommitted()) {
+        for (i = 0; i < BKBT_AP_EXIT_SLOTS && bkbt_ap_exits.entries[i].on_map != 0; i++) {
+            entry = &bkbt_ap_exits.entries[i];
+            if (entry->on_map != gsworld_getMap() || entry->og_map != *map || entry->og_exit != *exit) {
+                continue;
+            }
+            /* sGameState holds the map in a byte. Another game's destination waits for the doors between them. */
+            if (entry->to_game == BKBT_AP_GAME_BK && entry->to_map != 0 && entry->to_map <= 0xFF) {
+                *map = entry->to_map;
+                *exit = entry->to_exit;
+                remapped = TRUE;
+                bkbt_exits_taken++;
+            }
+            break;
+        }
+    }
+    from = level_get();
+    to = map_getLevel(*map);
+    if ((from == LEVEL_6_LAIR && bkbt_jinjoLevel(to)) || (to == LEVEL_6_LAIR && bkbt_jinjoLevel(from))) {
+        player_setTransformation(TRANSFORM_1_BANJO);
+    }
+    return remapped;
+}
+
+/* Quick transform. The Mumbo forms the Lair asks for (its witch-switch jiggies, a podium, the crypt and a token
+ * need one), each with the world whose Mumbo gives it. In retail Banjo carries the form out of that world into its
+ * own lobby, where the Lair's barriers keep it; with the exit map a world may lead out into another lobby, and
+ * bkbt_mapChange takes every form off at the way out. So the form comes at the door instead: D-pad left near the
+ * place where that world's way out brings him into its own lobby, once Mumbo has been paid for the form. */
+static const u8 sBkbtQuickForms[][2] = {
+    { LEVEL_1_MUMBOS_MOUNTAIN,     TRANSFORM_2_TERMITE },
+    { LEVEL_4_BUBBLEGLOOP_SWAMP,   TRANSFORM_5_CROC },
+    { LEVEL_5_FREEZEEZY_PEAK,      TRANSFORM_4_WALRUS },
+    { LEVEL_A_MAD_MONSTER_MANSION, TRANSFORM_3_PUMPKIN },
+    { LEVEL_8_CLICK_CLOCK_WOOD,    TRANSFORM_6_BEE },
+};
+/* How near the way out's marker. Each door's warp is 360 to 600 units from it (MMM's 223 above it), and the
+ * nearest barrier cube is about 1900 away (MAP_69; none in MAP_75), read from the ROM's setups on 2026-11-05: a
+ * barrier entered while the form is still coming does not take it off (src/core2/bs/dronexform.c). */
+#define BKBT_QUICK_REACH 600.0f
+#define BKBT_QUICK_HEIGHT 400.0f
+
+/* Presses of D-pad left seen in the Lair, and forms changed by them, since boot, for the tools. */
+u32 bkbt_quick_seen = 0;
+u32 bkbt_quick_done = 0;
+
+/* The form of the door Banjo is near, or 0. The place is the game's own: the level's way out into the Lair
+ * (D_8036C560) and that exit's marker in the map Banjo is in. */
+static s32 bkbt_quickZoneForm(void) {
+    enum map_e map;
+    s32 marker[3];
+    f32 position[3];
+    f32 dx;
+    f32 dy;
+    f32 dz;
+    s32 level;
+    s32 i;
+
+    map = gsworld_getMap();
+    player_getPosition(position);
+    for (i = 0; i < (s32) (sizeof(sBkbtQuickForms) / sizeof(sBkbtQuickForms[0])); i++) {
+        level = sBkbtQuickForms[i][0];
+        if (D_8036C560[level - 1].map != map || !player_getExitPosition(D_8036C560[level - 1].exit, marker)) {
+            continue;
+        }
+        dx = position[0] - marker[0];
+        dy = position[1] - marker[1];
+        dz = position[2] - marker[2];
+        if (dx * dx + dz * dz <= BKBT_QUICK_REACH * BKBT_QUICK_REACH &&
+            dy <= BKBT_QUICK_HEIGHT && -dy <= BKBT_QUICK_HEIGHT) {
+            return sBkbtQuickForms[i][1];
+        }
+    }
+    return 0;
+}
+
+/* Banjo stands, free to act, as Mumbo asks before he transforms him (src/core2/ch/mumbo.c), and with nothing else
+ * going on. A map's fade-in is not in the way: Banjo stands free for about a second before it ends, right where a
+ * world's way out brings him (looked into after the owner's hand test of 2026-11-06 refused the pumpkin at MMM's
+ * door); only a transition taking the map away is, and the game drops presses then anyway (src/core2/bakey.c). */
+static bool bkbt_quickCanChange(void) {
+    return func_8028F070() && !player_isDead() &&
+        player_movementGroup() == BSGROUP_0_NONE && player_isStable() &&
+        player_getWaterState() == BSWATERGROUP_0_NONE && bacarry_getMarker() == NULL &&
+        !gcdialog_hasCurrentTextId() && !gctransition_8030BDC0() &&
+        !volatileFlag_get(VOLATILE_FLAG_1) &&
+        !volatileFlag_get(VOLATILE_FLAG_2_FF_IN_MINIGAME) &&
+        !volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE);
+}
+
+/* Banjo's update (func_80295C14, src/core2/bsmethods.c) asks this right after it reads the buttons, while Banjo is
+ * in the map and in control. D-pad left, which the game itself never reads in play, in the Lair: near a door of
+ * sBkbtQuickForms, as Banjo with that form paid for, he takes it, with Mumbo's own sparkle (player_transform), the
+ * barriers re-armed first (each takes a form off once a map visit, and it may have done so already); in that form
+ * there, he turns back. Anything else in the Lair gets Mumbo's buzzer. */
+void bkbt_quickTransform(void) {
+    s32 form;
+    s32 current;
+
+    if (!bakey_pressed(BUTTON_D_LEFT) || !bkbt_file_chosen || !bkbt_apItemsAllowed() || level_get() != LEVEL_6_LAIR) {
+        return;
+    }
+    bkbt_quick_seen++;
+    form = bkbt_quickZoneForm();
+    current = player_getTransformation();
+    if (form != 0 && bkbt_quickCanChange()) {
+        if (current == TRANSFORM_1_BANJO &&
+            fileProgressFlag_get(FILEPROG_90_PAID_TERMITE_COST + form - TRANSFORM_2_TERMITE)) {
+            func_802D2CB8();
+            if (player_transform(form)) {
+                bkbt_quick_done++;
+                return;
+            }
+        } else if (current == form) {
+            if (player_transform(TRANSFORM_1_BANJO)) {
+                bkbt_quick_done++;
+                return;
+            }
+        }
+    }
+    coMusicPlayer_playMusic(COMUSIC_2C_BUZZER, 22000);
 }
 
 /* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.

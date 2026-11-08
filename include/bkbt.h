@@ -340,6 +340,42 @@ void bkbt_apNotesLoaded(void);
 s32 bkbt_apNotesTotal(s32 total);
 bool bkbt_apNotesKept(void);
 
+/* The exit map (hack feature 6, since 0.13.0): where a map change leads. The client writes it and this game only
+ * reads it, as the items. Entry by entry from the first, until one whose on_map is 0: a map change that the game
+ * asks for while Banjo is in on_map, to og_map at og_exit, goes to to_map at to_exit instead (bkbt_mapChange, from
+ * game_changeMap). Every boot starts it at 0, an empty table, which plays as retail; the client writes it before
+ * the seed, as the items, so a seed that is not 0 means it is complete. to_game is the game the destination is in:
+ * this one (BKBT_AP_GAME_BK) only for now; an entry for any other game is passed over, as if it were not there,
+ * until the doors between the games are built. The client writes only the doors that do not lead where they do
+ * in retail (worlds/banjo_kazooie/Entrances.py of the BKBT repository): BK's nine world entrances in the Lair, each
+ * with its way out, which leads back to the door that was used. */
+#define BKBT_AP_EXIT_SLOTS 32
+#define BKBT_AP_GAME_TOOIE 2        /* a to_game this build passes over */
+typedef struct {
+    u16 on_map;     /* +0x00: the map Banjo is in when the game asks (gsworld_getMap()); 0 ends the table */
+    u16 og_map;     /* +0x02: the map the game asks for */
+    u8 og_exit;     /* +0x04: the exit it asks for */
+    u8 to_game;     /* +0x05: BKBT_AP_GAME_BK, or the entry is passed over */
+    u16 to_map;     /* +0x06: in to_game's numbering, so a u16 for Tooie's maps; this game's fit a byte */
+    u8 to_exit;     /* +0x08 */
+    u8 padding[3];  /* +0x09: 0 */
+} BkbtApExit;       /* 12 bytes */
+typedef struct {
+    BkbtApExit entries[BKBT_AP_EXIT_SLOTS]; /* +0x000 */
+    u32 end;        /* +0x180: 0, never written: ends a full table, and its u32 puts the struct on a word boundary,
+                     * as the client's reads want (IDO has no aligned attribute) */
+} BkbtApExits;      /* 388 bytes */
+
+extern BkbtApExits bkbt_ap_exits;
+
+/* src/core1/code_0.c. bkbt_mapChange: game_changeMap (src/core2/code_5C870.c) asks it about every map change, with
+ * the change's game mode and level reset; TRUE when the exit map sent it elsewhere, *map and *exit then the new
+ * destination. It also turns Banjo back into himself on his way between the Lair and a world. bkbt_quickTransform:
+ * Banjo's update (func_80295C14, src/core2/bsmethods.c) asks it right after the buttons are read: D-pad left in
+ * the Lair, near the door of a world with a Mumbo form paid for, transforms him (and back). */
+bool bkbt_mapChange(s32 mode, s32 reset_level, s32 *map, s32 *exit);
+void bkbt_quickTransform(void);
+
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
  * 0x400000, the start of the Expansion Pak's half of RAM, which this game does not use. It holds the
@@ -353,7 +389,7 @@ bool bkbt_apNotesKept(void);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 12
+#define BKBT_AP_VERSION_MINOR 13
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -372,7 +408,8 @@ typedef struct {
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
     BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0, 92 since 0.10.0) */
     BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0, 336 since 0.10.0) */
-} BkbtApAnchor;                 /* 24 bytes */
+    BkbtApExits *exits;         /* +0x18: &bkbt_ap_exits, which the client writes (since 0.13.0) */
+} BkbtApAnchor;                 /* 28 bytes */
 
 extern BkbtApAnchor bkbt_ap_anchor;
 

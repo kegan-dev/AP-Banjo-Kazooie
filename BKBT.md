@@ -172,6 +172,12 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     `+0x06` from their padding), and Save and Quit and the last life go to the logos without the game-over
     cutscene. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/code_956B0.c`, `src/core2/gc/pauseMenu.c`,
     `src/core2/code_14420.c` ("The Lair's cutscene and the game-over cutscene" below).
+22. **The exit map and the quick transform** (2026-11-05; `docs/ROADMAP.md` of the BKBT repository, hack feature
+    6): a table the client writes (layout 0.13.0: the anchor's `+0x18`, 28 bytes) sends a map change elsewhere,
+    for the Archipelago setting that shuffles the Lair's nine world doors; a Mumbo form comes off on the way
+    between the Lair and a world, and D-pad left near a form's world's door in the Lair gives it back once Mumbo
+    was paid. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/code_5C870.c`, `src/core2/bsmethods.c` ("The exit
+    map and the quick transform" below).
 
 ## The frame hook
 
@@ -575,16 +581,19 @@ Archipelago items", and 24 since the molehills of 2026-10-22, "Molehills as Arch
 same 24 bytes in layout 0.5.0, the honeycombs of 2026-10-26, 0.6.0, the jiggies of 2026-10-27, 0.7.0,
 the Mumbo tokens of the same day, 0.8.0, the note doors of that day, which grew the structs it points
 to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, 0.10.0, the Jinjos of
-2026-10-29, which grew the structs again, and 0.11.0, the notes of 2026-10-30, which took padding bytes of the
-settings and the items and grew the locations). An
+2026-10-29, which grew the structs again, 0.11.0, the notes of 2026-10-30, which took padding bytes of the
+settings and the items and grew the locations, and 0.12.0, the Lair's cutscene of 2026-11-04, which took a padding
+byte of the settings; 28 bytes since the exit map of 2026-11-05, 0.13.0, "The exit map and the quick
+transform"). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.11.0
-  since the notes of 2026-10-30 (0.10.0 with the Jinjos of 2026-10-29, 0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
+- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.13.0
+  since the exit map of 2026-11-05 (0.12.0 with the Lair's cutscene of 2026-11-04, 0.11.0 with the notes of
+  2026-10-30, 0.10.0 with the Jinjos of 2026-10-29, 0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
   jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day,
   0.9.0 with Gruntilda beaten of 2026-10-28):
@@ -594,13 +603,14 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 24 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 on) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 28 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 to 0.12.0, 28 from 0.13.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 11 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0, 10 in 0.10.0) |
+  | `+0x0A` | `u8 version_minor` | 13 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0, 10 in 0.10.0, 11 in 0.11.0, 12 in 0.12.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
   | `+0x14` | `BkbtApLocations *locations` | `&bkbt_ap_locations`, which the game writes and the client reads (since 0.4.0; "Molehills as Archipelago locations") |
+  | `+0x18` | `BkbtApExits *exits` | `&bkbt_ap_exits`, which the client writes (since 0.13.0; "The exit map and the quick transform") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
@@ -608,12 +618,13 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   from 20 to 48, in 0.6.0 the locations to 152 and in 0.7.0 to 268 (the items took a byte of their
   padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor;
   0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing, 0.10.0 grew the items to 92 and
-  the locations to 336, and 0.11.0 took the settings' `+0x05` and the items' `+0x5A..+0x5B` from their
-  padding and grew the locations to 464. Later features append
+  the locations to 336, 0.11.0 took the settings' `+0x05` and the items' `+0x5A..+0x5B` from their
+  padding and grew the locations to 464, 0.12.0 took the settings' `+0x06`, and 0.13.0 appended the exit map's
+  pointer to the anchor. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
-  traps, the rest of 4's flags, the dialog queue of 5, the exit map of 6, death link of 7, a destination
-  for Phase 2), so an older client still reads a newer struct and a newer client sees from `size` what
+  traps, the rest of 4's flags, the dialog queue of 5, death link of 7, a destination for Phase 2; the exit
+  map of 6 came fourth, in 0.13.0), so an older client still reads a newer struct and a newer client sees from `size` what
   an older ROM has.
 - **Why the magic comes first.** A Tooie client reads `+0` of whatever the word points to as its version,
   a `u16` major, and stops before it follows a pointer when the major is neither 0 nor its own
@@ -1746,6 +1757,90 @@ reached headlessly. The owner tried it by hand on Project64 3.0.1 on 2026-11-04,
 slot: the lobby with no cutscene through the hub door, Save and Quit and the last life to the logos with the game
 saved, and with the setting turned off the cutscene once.
 
+## The exit map and the quick transform
+
+Done on 2026-11-05 (`docs/ROADMAP.md` of the BKBT repository, hack feature 6, and "The finished game": entrances
+shuffled across the games), the owner's decisions of that day: BK's side first, the Lair's nine world doors, a
+door's way back out leading to the door used; Mumbo's forms given back at the doors by D-pad left, like Tooie's
+quick transform, always on.
+
+**The exit map.** `bkbt_ap_exits` (`include/bkbt.h`, `BkbtApExits`; 388 bytes in core1's data, the anchor's `+0x18`
+since layout 0.13.0) is 32 entries of 12 bytes, `u16 on_map`, `u16 og_map`, `u8 og_exit`, `u8 to_game`, `u16
+to_map`, `u8 to_exit` and 3 bytes 0, then a `u32` 0 (it ends a full table, and puts the struct on a word, which IDO
+cannot be asked for). The client writes it, after the items and before the seed, as it writes them; every boot
+starts it at 0, an empty table. `bkbt_mapChange` (`src/core1/code_0.c`) is asked about every map change by
+`game_changeMap` (`src/core2/code_5C870.c`), right after `bkbt_doorMapChange` and before it reads the request
+(`sGameState.map`, `.exit`): every map change after boot passes there, after its fade (`game_update` hands the
+request over only then), with the old map's state still current. While a client's settings are committed and a game
+was chosen (`bkbt_file_chosen`), a change of the normal game into the normal game (`getGameMode()` and the `mode`
+asked for both `GAME_MODE_3_NORMAL`), with no level reset and neither the level's state kept nor `VOLATILE_FLAG_21`
+(a cutscene trip or its way back, Furnace Fun's minigames), goes by the first entry whose `on_map` is the map
+Banjo is in (`gsworld_getMap()`) and whose `og_map` and `og_exit` are the request's: `to_map` and `to_exit` instead,
+counted in `bkbt_exits_taken`. The entries end at the first `on_map` 0. `to_game` must be this game
+(`BKBT_AP_GAME_BK`, 1): an entry for another (`BKBT_AP_GAME_TOOIE`, 2) is passed over, as if it were not there,
+until the doors between the games are built, and so is a `to_map` of 0 or above `0xFF` (`sGameState.map` is a
+byte). What the gate leaves out: the demos, Bottles' Bonus, the parade and Stop 'n' Swop (other game modes), the
+trips that show a door or a witch switch (MMM's witch switch comes back from the FP lobby to MMM's own entrance,
+exit `0x14`, with `VOLATILE_FLAG_21`), Furnace Fun and every death (its respawn resets the level). Downstream
+everything reads the new request: `game_loadMap`, `mapSavestate_apply`, the level's load, the placement at the exit,
+the lobby's camera; the music's fade was decided for the old destination, the same for every world and lobby.
+
+The world (`worlds/banjo_kazooie/Entrances.py` of the BKBT repository) writes two entries for each Lair door that
+leads to another world than its own: in the door's lobby, its warp's request (`warp_*EnterLevel`,
+`src/core2/code_956B0.c`: the world's main map at its entrance) goes to the other world's entrance; in that world's
+main map, the request of its exit pad (actor `0x2E4`, `gcpausemenu_returnToLair`, `D_8036C560[level - 1]`,
+`src/core2/gc/pauseMenu.c:102-114`) goes to the door's lobby at the door's way out. Each world has one way in (one
+warp function in one lobby) and one way out (its pad), and nothing remembers the previous map for the placement, so
+two static entries a door are the whole of "leave by the door you came in". A world behind another door changes
+nothing else: `level_load` keys on the level, "entered from the Lair" is still set, the Jinjos' and notes' level
+entry are the level's.
+
+**The forms.** Forms survive map changes (`bsStoredState.transformation`; only `clearScoreStates` resets it), and
+the Lair's barriers (`sRadiusTriggers[0x4C]` warns, `[0x4D]`, `chMumbo_detransformTrigger`, turns Banjo back:
+radius cubes, `src/core2/gccube.c`, in the MM, FP, BGS, GV-puzzle and CCW lobbies, Furnace Fun's entrance and CCW's
+seasons) keep a form near the lobby it came out into; five lobbies have none. With the exit map a form would come
+out of a world into another lobby, or walk through a door into another world. So `bkbt_mapChange` also turns Banjo
+back (`player_setTransformation(TRANSFORM_1_BANJO)`, as Furnace Fun does, `src/lair/code_5ED0.c`) on every change
+between the Lair and one of the nine worlds, either way, under the same gate but the seed. The spawn reads the
+stored form, so he arrives as Banjo.
+
+**Quick transform.** `bkbt_quickTransform` (`src/core1/code_0.c`) runs from Banjo's update, `func_80295C14`
+(`src/core2/bsmethods.c`), right after `bakey_update`, while he is in the map and in control. On a fresh press of
+D-pad left (`bakey_pressed(BUTTON_D_LEFT)`: the game reads the D-pad nowhere in play, only in the pause menu) in
+the Lair, with the items allowed and a game chosen, it looks for the door of a form's world (MM the termite, BGS the
+croc, FP the walrus, MMM the pumpkin, CCW the bee) whose way out (`D_8036C560`) is the map Banjo is in, and that
+exit's marker (`player_getExitPosition`): within 600 units across and 400 up or down, while he stands free to act
+as Mumbo asks (placed, alive, `BSGROUP_0_NONE`, stable, out of the water, carrying nothing, no text, no transition
+taking the map away, no Furnace Fun or parade). A map's fade-in is no reason to wait (since 2026-11-06): a world's way
+out brings Banjo out standing free about 40 frames before the lobby's fade-in ends (`gctransition_done`), right on
+the marker: the one refusal a probe found where the owner's presses after coming out of MMM got the buzzer. Only
+`gctransition_8030BDC0` (a fade-out, or the first frames of the loading) refuses now, when `bakey` drops the press
+anyway (`src/core2/bakey.c`). There, as Banjo with the form paid for (`FILEPROG_90_PAID_TERMITE_COST + form -
+TRANSFORM_2_TERMITE`, the flag Mumbo sets when his spell lands, `src/core2/ch/mumbo.c:93-95`, `:395`), the barriers
+are re-armed (`func_802D2CB8`: each takes a form off once a map visit) and `player_transform(form)` gives the form
+with Mumbo's own sparkle; in that form there, `player_transform(TRANSFORM_1_BANJO)` turns him back. Any other press
+in the Lair gets Mumbo's buzzer (`COMUSIC_2C_BUZZER`); there is no text (the hack has no dialog queue yet).
+`bkbt_quick_seen` counts the presses, `bkbt_quick_done` the changes. Each door's warp is 360 to 600 units from its
+marker and the nearest barrier cube about 1900 away (MM's lobby; MMM's has none), read from the ROM's setups: a
+barrier entered while the sparkle runs does not take the form off (`src/core2/bs/dronexform.c`, its interrupt does
+nothing). The form comes where retail's way out brings Banjo out of its world, so each of the Lair's checks that
+needs one is reached from there as in retail; the world's logic asks for the form's tokens, its Mumbo's skull reached
+and its door reached (`worlds/banjo_kazooie/Rules.py` of the BKBT repository, `lair_tree`).
+
+Checked on mupen64plus with the BKBT repository's `tools/bk_entrance_check.py` (a game loaded, the client's table
+written, Banjo put on a door's warp and then on the world's pad: the first door into each of the other eight worlds,
+each other door into another world, no table, an entry for Tooie passed over; on the ROM by itself and the image)
+and `tools/bk_transform_check.py` (the five forms at their doors, the second press, no form paid, away from the
+door, the MM lobby's barrier twice, a termite through MM's door arriving as Banjo, and since 2026-11-06 each form
+carried out of its world, by its exit pad, as Banjo, and D-pad left during the lobby's fade-in: the form, where the
+build before refused it), and the whole suite on the rebuilt images. A purchase from Mumbo in MMM's skull and the way
+out with that pumpkin were played once with a probe (2026-11-06, not a check). Not checked headlessly: a death in a
+shuffled world. By hand on ares v148 (`docs/tutorials/26-exit-map.md` of the BKBT repository): on 2026-11-06 the
+termite worked at MM's door and the pumpkin got the buzzer where MMM's way out brings Banjo, before this fix; with it
+the owner's hand test passed on 2026-11-07 (the termite, the pumpkin and the bee at their doors and their tasks with
+them, the doors kept across a save and a load). The owner found that Banjo has to stand very close to the door; the
+zone stays as it is until players' feedback.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1765,7 +1860,8 @@ saved, and with the setting turned off the cutscene once.
   locations of 2026-10-22, 68,240 with the save in SRAM of 2026-10-26, which no longer links
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
   2026-10-27, 66,768 with the Mumbo tokens of that day, 66,464 with the note doors of that day, 66,384
-  with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29 and 59,968 with the notes of 2026-10-30:
+  with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29, 59,968 with the notes of 2026-10-30 and
+  56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`):
   the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
@@ -1813,7 +1909,9 @@ saved, and with the setting turned off the cutscene once.
   honeycomb check reads (the seed check writes `sHoneycombScore` to stand in for a pickup). Since the
   jiggies of 2026-10-27 `bkbt_jiggies_given` and the game's own `jiggyscore`, `gFileProgressFlags` and
   `itemPrintValues`, which the jiggy check reads (the seed check writes `jiggyscore` to stand in for a
-  pickup). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
+  pickup). Since the exit map of 2026-11-05 `bkbt_ap_exits` (the anchor check compares the anchor's `+0x18` with
+  it), `bkbt_exits_taken`, `bkbt_quick_seen` and `bkbt_quick_done` (initialised globals, which the entrance and
+  transform checks read), and the game's own `bsStoredState` (`+8`, the form). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
   and `D_803692F8` (the counters on the screen), which the token check reads (the seed check writes
   `sMumboTokenScore` to stand in for a pickup). Since the note doors of that day `bkbt_note_door_costs`,
   which the note-door check requires as the mark of a build with the note doors, and the game's own
@@ -1857,4 +1955,5 @@ saved, and with the setting turned off the cutscene once.
     locations; 23,728 in that of 2026-10-26, with the save in SRAM, whose fill starts at cart
     `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`; 23,376 in that
     with the jiggies of 2026-10-27, fill from `0xFDA4B0`; 23,104 in that with the Mumbo tokens of that
-    day, fill from `0xFDA5C0`; 22,848 in that with the note doors of that day, fill from `0xFDA6C0`).
+    day, fill from `0xFDA5C0`; 22,848 in that with the note doors of that day, fill from `0xFDA6C0`; 18,848 in
+    that with the exit map of 2026-11-05).
