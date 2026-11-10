@@ -161,9 +161,11 @@ static bool sBkbtLaunched = FALSE;            /* this game was started by the la
 static u32 sBkbtFlags = 0;                    /* BKBT_FLAG_*, latched at boot */
 static void (*sBkbtReturnEntry)(void) = NULL; /* the payload's entry: returns to Tooie, never to its caller; call it through bkbt_return */
 static bool sBkbtChordArmed = FALSE;          /* the pad has been read with the chord not down since boot */
-static bool sBkbtDoorArrival = FALSE;         /* the hub door brought this boot, and its game has not started yet */
-static bool sBkbtDoorSession = FALSE;         /* the hub door brought this boot: the Lair's exit leads to Tooie */
-static u32 sBkbtDoorLink = 0;                 /* the link of the Tooie file the hub door brought (contract 4) */
+static bool sBkbtDoorArrival = FALSE;         /* a door brought this boot, and its game has not started yet */
+static bool sBkbtDoorSession = FALSE;         /* a door brought this boot: the Lair's exit and Tooie's doors lead to Tooie */
+static u32 sBkbtDoorDestMap = 0;              /* the map and exit of the destination the door brought (contract 5) */
+static u32 sBkbtDoorDestExit = 0;
+static u32 sBkbtDoorLink = 0;                 /* the link of the Tooie file the door brought (contract 4) */
 static u32 sBkbtDoorFileLinks[3] = {0, 0, 0}; /* the links Tooie's three files hold */
 static bool sBkbtCurtain = FALSE;             /* the screen black and the sound silent (bkbt_curtainUp) */
 static bool sBkbtViWanted = FALSE;            /* what the game last asked osViBlack for (bkbt_viBlack) */
@@ -932,11 +934,15 @@ void bkbt_init(void) {
     }
     sBkbtLaunched = TRUE;
     sBkbtFlags = handoff[BKBT_HANDOFF_FLAGS];
-    /* The hub door's destination is the only one this game knows (include/bkbt.h). It comes with the
-     * links (contract 4), and the screen stays black and the sound silent until the Lair is there */
-    if (dest_map == (BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY) && dest_exit == WARP_GL_MM_LOBBY_12_ENTRANCE) {
+    /* A door's destination (include/bkbt.h): the hub door's, the Lair's entrance, or since contract 5 any other map
+     * of this game, where a door between the games leads (sGameState holds a map in a byte). It comes with the
+     * links (contract 4), and the screen stays black and the sound silent until the map is there */
+    if ((dest_map & 0xFFFF0000) == BKBT_DEST_TAG && (dest_map & 0xFFFF) != 0 && (dest_map & 0xFFFF) <= 0xFF &&
+        dest_exit <= 0xFF) {
         sBkbtDoorArrival = TRUE;
         sBkbtDoorSession = TRUE;
+        sBkbtDoorDestMap = dest_map & 0xFFFF;
+        sBkbtDoorDestExit = dest_exit;
         sBkbtDoorLink = link;
         for (i = 0; i < 3; i++) {
             sBkbtDoorFileLinks[i] = file_links[i];
@@ -1009,10 +1015,25 @@ static void bkbt_return(void) {
     bkbt_returnTo(0, 0);
 }
 
-/* The hub door (include/bkbt.h). The file select (src/core2/ch/gameSelect.c) asks bkbt_doorArrival whether to
- * choose the file itself and start it in the Lair, and says bkbt_doorArrived when it has. */
+/* The doors (include/bkbt.h). The file select (src/core2/ch/gameSelect.c) asks bkbt_doorArrival whether to
+ * choose the file itself and start it at the door's destination, and says bkbt_doorArrived when it has. */
 bool bkbt_doorArrival(void) {
     return sBkbtDoorArrival;
+}
+
+void warp_lairEnterLairFromSMLevel(s32 arg0, s32 arg1); /* src/core2/code_956B0.c */
+void func_8031CC8C(s32 arg0, s32 arg1);                 /* src/core2/code_956B0.c: every warp's, to (map << 8) + exit */
+
+/* Where the file select starts a door's game. The hub door's destination, the Lair's entrance, as Spiral Mountain's
+ * entrance into the Lair goes: the Lair's cutscene the first time, or its skip, with FILEPROG_BD. Any other (a
+ * world's entrance, or a lobby at one of the Lair's doors: the doors between the games) straight, as a door's warp
+ * takes Banjo there (warp_mmEnterLevel and the others, src/core2/code_956B0.c). */
+void bkbt_doorWarp(s32 arg0, s32 arg1) {
+    if (sBkbtDoorDestMap == MAP_69_GL_MM_LOBBY && sBkbtDoorDestExit == WARP_GL_MM_LOBBY_12_ENTRANCE) {
+        warp_lairEnterLairFromSMLevel(arg0, arg1);
+    } else {
+        func_8031CC8C(0, (sBkbtDoorDestMap << 8) + sBkbtDoorDestExit);
+    }
 }
 
 void bkbt_doorArrived(void) {
@@ -1023,9 +1044,9 @@ u32 bkbt_doorLink(void) {
     return sBkbtDoorLink;
 }
 
-/* The curtain (include/bkbt.h). Raised by bkbt_init with the hub door's arrival and by bkbt_doorMapChange; lifted by
- * bkbt_frame once the destination's map is there, or by bkbt_curtainLift when the player has to choose. The
- * game's own osViBlack calls (the file select's every frame, a transition's) go through bkbt_viBlack, which
+/* The curtain (include/bkbt.h). Raised by bkbt_init with a door's arrival and by the ways back to Tooie
+ * (bkbt_doorMapChange, bkbt_mapChange's entries for Tooie); lifted by bkbt_frame once the destination's map is
+ * there, or by bkbt_curtainLift when the player has to choose. The game's own osViBlack calls (the file select's every frame, a transition's) go through bkbt_viBlack, which
  * holds the screen black while the curtain is up and remembers what the game asked for: the lifting gives it
  * that. Not every transition blacks and shows the screen itself (the Lair's cutscene's does not: mupen64plus,
  * 2026-11-02): from the file select retail shows the new map because the file select's last call showed it. */
@@ -1155,10 +1176,14 @@ u32 bkbt_exits_taken = 0;
  * Bottles' Bonus, the parade, Stop 'n' Swop, the trips that show a door or a witch switch (MMM's witch switch comes
  * back to MMM's own entrance, exit 0x14, from the FP lobby), Furnace Fun and a death, whose respawn resets the
  * level. Then the first entry of the exit map for this map, the map asked for and its exit (include/bkbt.h) sends it
- * to its destination, while a client's settings are committed and a game was chosen. And a change between the Lair
- * and one of the nine worlds, either way, turns Banjo back into himself, as Furnace Fun does (lair/code_5ED0.c), so
- * that no Mumbo form goes through a door whose world the exit map changed, or comes out of a world into another
- * lobby, past the Lair's barriers: quick transform (below) gives the Lair's forms back at the doors. */
+ * to its destination, while a client's settings are committed and a game was chosen (a world's way out is its
+ * exit pad's alone: the pause menu's Exit to Witch's Lair, which asks for the same from any map of the world, is
+ * never offered, docs/bk-decomp-notes.md). An entry for Tooie, in a game a door started (contract 5), saves and
+ * returns to Tooie at its destination, as bkbt_doorMapChange does for the hub door, and does not come back; in any
+ * other game it is passed over. And a change between the Lair and one of the nine
+ * worlds, either way, turns Banjo back into himself, as Furnace Fun does (lair/code_5ED0.c), so that no Mumbo form
+ * goes through a door whose world the exit map changed, or comes out of a world into another lobby, past the Lair's
+ * barriers: quick transform (below) gives the Lair's forms back at the doors. */
 bool bkbt_mapChange(s32 mode, s32 reset_level, s32 *map, s32 *exit) {
     enum level_e from;
     enum level_e to;
@@ -1176,12 +1201,21 @@ bool bkbt_mapChange(s32 mode, s32 reset_level, s32 *map, s32 *exit) {
             if (entry->on_map != gsworld_getMap() || entry->og_map != *map || entry->og_exit != *exit) {
                 continue;
             }
-            /* sGameState holds the map in a byte. Another game's destination waits for the doors between them. */
+            /* sGameState holds the map in a byte; Tooie's are its own numbers */
             if (entry->to_game == BKBT_AP_GAME_BK && entry->to_map != 0 && entry->to_map <= 0xFF) {
                 *map = entry->to_map;
                 *exit = entry->to_exit;
                 remapped = TRUE;
                 bkbt_exits_taken++;
+            } else if (entry->to_game == BKBT_AP_GAME_TOOIE && entry->to_map != 0 && sBkbtDoorSession &&
+                       sBkbtReturnEntry != NULL) {
+                /* the state the hub door's way out leaves in (bkbt_doorMapChange): the fade has played, the screen
+                 * is black and the game still the map's; the save of the level change, then Tooie */
+                bkbt_exits_taken++;
+                sBkbtCurtain = TRUE;
+                osViBlack(TRUE);
+                gameSelect_saveAndExit();
+                bkbt_returnTo(entry->to_map, entry->to_exit);
             }
             break;
         }

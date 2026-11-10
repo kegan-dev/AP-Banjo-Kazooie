@@ -178,6 +178,11 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     between the Lair and a world, and D-pad left near a form's world's door in the Lair gives it back once Mumbo
     was paid. `include/bkbt.h`, `src/core1/code_0.c`, `src/core2/code_5C870.c`, `src/core2/bsmethods.c` ("The exit
     map and the quick transform" below).
+23. **The doors between the games** (2026-11-07, dual-boot contract 5 and layout 0.14.0; `docs/ROADMAP.md` of the
+    BKBT repository, "Entrances shuffled across the games"): a door's arrival may be any map of this game, where
+    the file select starts the door's game (`bkbt_doorWarp`), and an exit-map entry for Tooie, in a game a door
+    started, saves and returns to Tooie at its destination. `include/bkbt.h`, `src/core1/code_0.c`,
+    `src/core2/ch/gameSelect.c`, `manual_syms.us.v10.txt` ("The doors between the games" below).
 
 ## The frame hook
 
@@ -198,8 +203,8 @@ game and so does not depend on this build. One payload serves every build of the
 
 ### The contract number
 
-`bkbt_contract = 4;` in `manual_syms.us.v10.txt` (since 2026-11-02, the links; 3 from 2026-10-31, the
-destination; 2 before) is the only
+`bkbt_contract = 5;` in `manual_syms.us.v10.txt` (since 2026-11-07, the doors between the games: a destination
+may be any map; 4 from 2026-11-02, the links; 3 from 2026-10-31, the destination; 2 before) is the only
 place on this side that says the number. It is a linker symbol so that the map carries it; C uses it as
 `(u32) bkbt_contract`. The launcher carries the same number in a tag, the Tooie hack's C in a tagged record,
 the payload in its header, and the image builder of the BKBT repository compares them all. Raise it when the
@@ -213,13 +218,13 @@ the two have to be kept in step). This side uses ten words:
 
 | Offset | Meaning | Written by | This side |
 |---|---|---|---|
-| `+0x18` | destination (contract 3): `BKBT_DEST_TAG` (`'DS'`) `\| map`, 0 = none, in the started game's numbering | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token; `bkbt_returnTo` writes Tooie's ("The hub door") |
+| `+0x18` | destination (contract 3): `BKBT_DEST_TAG` (`'DS'`) `\| map`, 0 = none, in the started game's numbering | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token, any map of this game since contract 5 ("The doors between the games"; the hub door's only before); `bkbt_returnTo` writes Tooie's ("The hub door") |
 | `+0x1C` | the destination's entrance | the same | the same |
-| `+0x20` | launch token, `0x424B4700 \| contract` (`'B','K','G',4`), written on every launch of this game | Tooie's launcher | `bkbt_init` reads it and zeroes it |
+| `+0x20` | launch token, `0x424B4700 \| contract` (`'B','K','G',5`), written on every launch of this game | Tooie's launcher | `bkbt_init` reads it and zeroes it |
 | `+0x24` | KSEG0 address of the header of the payload loaded in this launch, 0 if none | Tooie's launcher | `bkbt_init` reads it and zeroes it |
 | `+0x28` | test countdown: `mainLoop` iterations before the game returns by itself, 0 = stay | the Tooie hack | `bkbt_frame` counts it down |
 | `+0x2C` | flags. Bit 0: the chord also works outside the front end. Bit 1 (`BKBT_FLAG_DOOR_TEST`, tests): the countdown counts in the Lair's lobby only, and then takes its way out ("The hub door") | the Tooie hack | `bkbt_init` latches it |
-| `+0x30` | link (contract 4): with a destination, the link of the Tooie file at the hub door, or back to Tooie the one the save carries (`bkbt_playing_link`); 0 = none | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token and the hub door's destination; `bkbt_returnTo` writes it |
+| `+0x30` | link (contract 4): with a destination, the link of the Tooie file at the hub door, or back to Tooie the one the save carries (`bkbt_playing_link`); 0 = none | the game being left, on every launch | `bkbt_init` reads it and zeroes it, and believes it only with the token and a destination; `bkbt_returnTo` writes it |
 | `+0x34..+0x3C` | from Tooie with a destination: the links its three files hold, 0 = none; to Tooie 0 | the same | `bkbt_init` reads them and zeroes them; `bkbt_returnTo` writes 0 |
 
 **This side accesses the block through KSEG1 only** (`0xA05FFF00`, `volatile`). The return launcher
@@ -584,15 +589,15 @@ to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, 0.10.0, th
 2026-10-29, which grew the structs again, 0.11.0, the notes of 2026-10-30, which took padding bytes of the
 settings and the items and grew the locations, and 0.12.0, the Lair's cutscene of 2026-11-04, which took a padding
 byte of the settings; 28 bytes since the exit map of 2026-11-05, 0.13.0, "The exit map and the quick
-transform"). An
+transform", and in 0.14.0, the doors between the games of 2026-11-07). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.13.0
-  since the exit map of 2026-11-05 (0.12.0 with the Lair's cutscene of 2026-11-04, 0.11.0 with the notes of
+- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.14.0
+  since the doors between the games of 2026-11-07 (0.13.0 with the exit map of 2026-11-05, 0.12.0 with the Lair's cutscene of 2026-11-04, 0.11.0 with the notes of
   2026-10-30, 0.10.0 with the Jinjos of 2026-10-29, 0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
   jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day,
@@ -619,8 +624,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   padding each time), and in 0.8.0 the items to 40 and the locations to 284, behind an unchanged anchor;
   0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing, 0.10.0 grew the items to 92 and
   the locations to 336, 0.11.0 took the settings' `+0x05` and the items' `+0x5A..+0x5B` from their
-  padding and grew the locations to 464, 0.12.0 took the settings' `+0x06`, and 0.13.0 appended the exit map's
-  pointer to the anchor. Later features append
+  padding and grew the locations to 464, 0.12.0 took the settings' `+0x06`, 0.13.0 appended the exit map's
+  pointer to the anchor, and 0.14.0 grew nothing: the exit map's entries for Tooie are taken. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, death link of 7, a destination for Phase 2; the exit
@@ -700,7 +705,7 @@ hack feature 2); the refusal with an escape, and the seed written last as the wo
 rest, are the owner's decisions of 2026-10-17; the seed bound to the save, and no escape, the owner's of
 2026-10-22 and 2026-10-26.
 
-- **The layout** (`include/bkbt.h:83-92`), big-endian, behind the anchor's `+0x0C` (`:158`):
+- **The layout** (`include/bkbt.h:90-99`), big-endian, behind the anchor's `+0x0C` (`:158`):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -721,7 +726,7 @@ rest, are the owner's decisions of 2026-10-17; the seed bound to the save, and n
   `&bkbt_ap_settings` (`:252`), which the linker fills in. Game code reads settings only through
   `bkbt_apSettings`, so that no reader sees a half-written struct or takes its zeros for values (the file
   select's seed test reads `bkbt_ap_settings.seed` directly, after `bkbt_apSettingsCommitted()`).
-  Declarations: `include/bkbt.h:94`, `:100-101`.
+  Declarations: `include/bkbt.h:101`, `:100-101`.
 - **Every boot starts at 0.** core1's `.data` is loaded again at every boot, a reset and each launch
   from Tooie included, so after either the settings read 0 and the client has to write them again.
 - **The protocol, for the client** (none exists yet). One writer per region: the client writes the
@@ -744,7 +749,7 @@ rest, are the owner's decisions of 2026-10-17; the seed bound to the save, and n
   buzzer.
 - **The seed bound to the save** (2026-10-26). Every game record carries the seed it was played with
   (`SaveData.seed`, `include/save.h:12-16`; "The save device"). Two globals in
-  `src/core1/code_0.c:172-173` (`include/bkbt.h:165-174`), both 0 at boot: `bkbt_file_seed`, the seed of
+  `src/core1/code_0.c:172-173` (`include/bkbt.h:172-181`), both 0 at boot: `bkbt_file_seed`, the seed of
   the game the file select shows, set by `saveData_load` from the record
   (`src/core2/code_B5040.c:382-385`) whenever the file select loads a hovered game that is not empty
   (`setGameInformationZoombox`, `gameSelect.c:228-238`) and zeroed by `clearScoreStates`
@@ -843,7 +848,7 @@ that day. Its known issue, the Spiral Mountain molehill that teaches the jumps s
 attached, is resolved since 2026-10-22 by hack feature 4's molehills (below; "Molehills as Archipelago
 locations").
 
-- **The layout** (`include/bkbt.h:103-114`), behind the anchor's `+0x10` (`:159`):
+- **The layout** (`include/bkbt.h:110-121`), behind the anchor's `+0x10` (`:159`):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -858,7 +863,7 @@ locations").
   moves[i] != 0)` for each i below `BKBT_AP_MOVE_COUNT` and counts the pass. It is the first statement
   of `bkbt_frame` (`:341-342`), so it runs once per `mainLoop` iteration, ahead of the chord.
   `core2/abilityprogress.h` is included under `#if BKBT` at the top (`:8-11`). The anchor's initialiser
-  holds `&bkbt_ap_items` (`:250`). Declaration: `include/bkbt.h:114`. (Lines of the molehills' build of
+  holds `&bkbt_ap_items` (`:250`). Declaration: `include/bkbt.h:121`. (Lines of the molehills' build of
   2026-10-22.)
 - **The mirror.** `ability_setLearned` (`src/core2/abilityprogress.c:114-120`) sets or clears one bit of
   `learnedAbilities` and does nothing else: no dialog, no sound, no flag. So a received move is there
@@ -998,7 +1003,7 @@ owner's decisions of that day. It resolves the known issue of the items: the Spi
 that teaches the jumps no longer softlocks under a client. Since 2026-10-26 the locations are saved with
 the game (below).
 
-- **The layout** (`include/bkbt.h:116-127`), behind the anchor's `+0x14` (`:160`):
+- **The layout** (`include/bkbt.h:123-134`), behind the anchor's `+0x14` (`:160`):
 
   | Offset | Field | Value |
   |---|---|---|
@@ -1010,7 +1015,7 @@ the game (below).
   bytes each (below).
 - **Where.** `src/core1/code_0.c`: the global `bkbt_ap_locations` (`:199-201`), initialised data in
   core1's `.data`, all 0; the anchor's initialiser ends with `&bkbt_ap_locations` (`:251`).
-  Declaration: `include/bkbt.h:127`. Its writers and readers are the two molehill actors,
+  Declaration: `include/bkbt.h:134`. Its writers and readers are the two molehill actors,
   `src/core2/ch/mole.c` and `src/SM/ch/smbottles.c`, each with `bkbt.h` included under `#if BKBT` at the
   top (`mole.c:5-7`, `smbottles.c:7-9`).
 - **The molehills of the levels and the Lair** (`mole.c`, ids 9..`0x12`, the table `moleTable`,
@@ -1170,14 +1175,14 @@ bits; the pause menu keeps counting the honeycombs picked up.
   at every map load (`gc/section.c:286`) and every load of a save (`func_80347958`, which also fills the
   health). The pickup adds a piece and, with the sixth, blocks the pause menu (`gcpausemenu_80314AC8(0)`);
   the HUD (`fx/honeycarrierscore.c:179-255`) trades six pieces for a unit of health and lifts the block.
-- **The layout** (`include/bkbt.h:103-141`; layout 0.5.0, `BKBT_AP_VERSION_MINOR` 5): the items gained
+- **The layout** (`include/bkbt.h:110-148`; layout 0.5.0, `BKBT_AP_VERSION_MINOR` 5): the items gained
   `+0x14 u8 honeycombs`, the total received, read as at most `BKBT_AP_HONEYCOMB_MAX` (24), and 3 bytes of
   named padding (24 bytes); the locations gained `+0x14 u8 honeycombs[BKBT_AP_HONEYCOMB_SLOTS]`,
   `BKBT_AP_HONEYCOMB_SLOTS` `0x19`, indexed by `enum honeycomb_e` like the game's `HONEYCOMB_COUNT` (byte
   `[0]` is never set), not 0 = picked up, and padding (48 bytes). A client writes the total only to a ROM
   whose anchor says 0.5.0 or later: in a 0.4.0 ROM the byte after the moves is `bkbt_ap_locations.moves[0]`.
 - **Which state is the chosen game's: `bkbt_file_chosen`** (`src/core1/code_0.c:174`, declared in
-  `include/bkbt.h:149`). The score state holds the chosen game only between A on the file select and the
+  `include/bkbt.h:156`). The score state holds the chosen game only between A on the file select and the
   next `clearScoreStates`: hovering a file clears it and loads that file (`src/core2/ch/gameSelect.c:228-238`),
   and demos and Bottles' Bonus clear it too. The flag is set in `bkbt_gameFile_loadAP`
   (`src/core2/code_B5E00.c:142`), which runs at A and after the mid-session reloads, each time right
@@ -1262,7 +1267,7 @@ for now.
   clamp at 0 refuses (`code_BEF20.c:80`, `:149-151`). The sandcastle cheats of Treasure Trove Cove fill
   the puzzles of CC to CCW without spending (`src/TTC/ma/castle.c:954-1016`), so the jiggies held are not
   the jiggies received minus the pieces placed.
-- **The layout** (`include/bkbt.h:103-168`; layout 0.6.0, `BKBT_AP_VERSION_MINOR` 6): the items keep 24
+- **The layout** (`include/bkbt.h:110-175`; layout 0.6.0, `BKBT_AP_VERSION_MINOR` 6): the items keep 24
   bytes, `+0x15 u8 jiggies` taken from their padding (the total received, read as at most
   `BKBT_AP_JIGGY_MAX`, 100); the locations append `+0x30 u8 jiggies[BKBT_AP_JIGGY_SLOTS]` (`0x65`, indexed
   by `enum jiggy_e`, `[0]` never set, not 0 = picked up) and 3 bytes of padding behind the honeycombs'
@@ -1346,7 +1351,7 @@ owner chose for the jiggies after their first hand test).
   pause menu, which every `item_adjustByDiff` call sets to it (`code_BEF20.c:96`). Mumbo keeps the token
   counter on the screen while he is awake (`mumbo.c:222-227`). The sandcastle's banned cheat sets the
   tokens held to 99 (`src/TTC/ma/castle.c:1019`) and the attract demo to 25 (`src/core2/code_C4320.c:209`).
-- **The layout** (`include/bkbt.h:103-178`; layout 0.7.0, `BKBT_AP_VERSION_MINOR` 7): the items keep 24
+- **The layout** (`include/bkbt.h:110-185`; layout 0.7.0, `BKBT_AP_VERSION_MINOR` 7): the items keep 24
   bytes, `+0x16 u8 tokens` taken from their padding (the total received, read as at most
   `BKBT_AP_TOKEN_MAX`, 115), one byte of padding left at `+0x17`; the locations append `+0x98 u8
   tokens[BKBT_AP_TOKEN_SLOTS]` (`0x74`, indexed by `enum mumbotoken_e`, `[0]` never set, not 0 = picked
@@ -1411,7 +1416,7 @@ the costs stay retail's for now.
   the middle of its model (290 of its origin before it is drawn), fades out, sets its flag, despawns and
   sets off the jig (`:976-1004`); with too few notes door 2 and later make Grunty speak within 290 units
   (`:1029-1031`). Nothing marks a threshold reached; nothing else reads the door flags.
-- **The layout** (`include/bkbt.h:103-204`; layout 0.8.0, `BKBT_AP_VERSION_MINOR` 8): the items grow to 40
+- **The layout** (`include/bkbt.h:110-211`; layout 0.8.0, `BKBT_AP_VERSION_MINOR` 8): the items grow to 40
   bytes, `+0x18 u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]` (13, indexed by the door's selector, `[0]` never
   set, not 0 = received) behind the padding byte `+0x17`, then 3 bytes of padding; the locations append
   `+0x10C u8 note_doors[13]` (the same index, not 0 = the door's threshold reached), then 3 bytes of
@@ -1463,7 +1468,7 @@ hack publishes it, rather than the client reading the game's flags.
   several seconds; the game saves the flag with the file, and reads it for the ending's extras
   (`src/core2/code_956B0.c:1459`, `src/core2/code_14420.c:909-936`) and the Lair's cauldrons
   (`src/lair/ch/cauldron.c:181`).
-- **The layout** (`include/bkbt.h:164-174`; layout 0.9.0, `BKBT_AP_VERSION_MINOR` 9): `+0x119 u8
+- **The layout** (`include/bkbt.h:171-181`; layout 0.9.0, `BKBT_AP_VERSION_MINOR` 9): `+0x119 u8
   gruntilda_beaten` of the locations, the first of the three padding bytes behind the note doors' thresholds,
   then 2 bytes of padding: the locations stay 284 bytes and the anchor 24. Not 0 means the flag is set. The
   game is the only writer and the client only reads, as for every location. A client reads the byte only
@@ -1669,9 +1674,9 @@ ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_
 `WARP_GL_MM_LOBBY_12_ENTRANCE` and the links in the handoff block (`include/bkbt.h`).
 
 - **Arrival.** `bkbt_init` reads and zeroes the two words with the token and the payload address; with the
-  token and exactly that destination it sets an arrival and a door session, latches the link of the Tooie
-  file at the door and the links of Tooie's three files, and raises the curtain (`src/core1/code_0.c`). Any
-  other destination is ignored. `core1_init` boots into `MAP_91_FILE_SELECT` while the arrival stands, instead
+  token and a destination it sets an arrival and a door session, latches the destination, the link of the
+  Tooie file at the door and the links of Tooie's three files, and raises the curtain (`src/core1/code_0.c`).
+  Until contract 5 any other destination than the hub door's was ignored ("The doors between the games"). `core1_init` boots into `MAP_91_FILE_SELECT` while the arrival stands, instead
   of `getDefaultBootMap()`, and blacks the screen as soon as the VI manager runs.
 - **The game** (`bkbt_doorChoose`, `src/core1/code_0.c`; the owner's order, 2026-11-02). Read from
   `gameFile_saveData[gameFile_GameIdToFileIdMap[g]]`: the save with the Tooie file's link and the committed
@@ -1686,8 +1691,9 @@ ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_
   game's next update starts it as A and `GAME_SELECT_STARTING` do for an arrival, without the press, its
   sounds, its animation or the "silly" start: `bkbt_playing_seed`, `bkbt_gameFile_loadAP`,
   `bkbt_playing_link = bkbt_doorLink()`, `bkbt_doorArrived()`, `chBottlesBonus_resetCompleted()`,
-  `warp_lairEnterLairFromSMLevel` (the Lair's cutscene, map `0x82`, while `FILEPROG_BD` is not set, unless the
-  setting `skip_lair_cutscene` skips it: "The Lair's cutscene and the game-over cutscene") and
+  `bkbt_doorWarp`, which for the hub door's destination is `warp_lairEnterLairFromSMLevel` (the Lair's
+  cutscene, map `0x82`, while `FILEPROG_BD` is not set, unless the setting `skip_lair_cutscene` skips it: "The
+  Lair's cutscene and the game-over cutscene") and
   `gsworld_setEnableUpdate(1)`, then `GAME_SELECT_DONE`. With -1 the curtain lifts and the player chooses;
   the A path gives a game chosen so the door's link too, and `GAME_SELECT_STARTING` sends it to the Lair
   as before. A new game skips Spiral Mountain, whose moves come as items.
@@ -1776,10 +1782,10 @@ was chosen (`bkbt_file_chosen`), a change of the normal game into the normal gam
 asked for both `GAME_MODE_3_NORMAL`), with no level reset and neither the level's state kept nor `VOLATILE_FLAG_21`
 (a cutscene trip or its way back, Furnace Fun's minigames), goes by the first entry whose `on_map` is the map
 Banjo is in (`gsworld_getMap()`) and whose `og_map` and `og_exit` are the request's: `to_map` and `to_exit` instead,
-counted in `bkbt_exits_taken`. The entries end at the first `on_map` 0. `to_game` must be this game
-(`BKBT_AP_GAME_BK`, 1): an entry for another (`BKBT_AP_GAME_TOOIE`, 2) is passed over, as if it were not there,
-until the doors between the games are built, and so is a `to_map` of 0 or above `0xFF` (`sGameState.map` is a
-byte). What the gate leaves out: the demos, Bottles' Bonus, the parade and Stop 'n' Swop (other game modes), the
+counted in `bkbt_exits_taken`. The entries end at the first `on_map` 0. `to_game` is this game
+(`BKBT_AP_GAME_BK`, 1), whose `to_map` 0 or above `0xFF` is passed over (`sGameState.map` is a byte), or since
+layout 0.14.0 Tooie (`BKBT_AP_GAME_TOOIE`, 2): in a game a door started that entry saves and returns to Tooie
+("The doors between the games"), in any other it is passed over, as if it were not there. What the gate leaves out: the demos, Bottles' Bonus, the parade and Stop 'n' Swop (other game modes), the
 trips that show a door or a witch switch (MMM's witch switch comes back from the FP lobby to MMM's own entrance,
 exit `0x14`, with `VOLATILE_FLAG_21`), Furnace Fun and every death (its respawn resets the level). Downstream
 everything reads the new request: `game_loadMap`, `mapSavestate_apply`, the level's load, the placement at the exit,
@@ -1841,6 +1847,49 @@ the owner's hand test passed on 2026-11-07 (the termite, the pumpkin and the bee
 them, the doors kept across a save and a load). The owner found that Banjo has to stand very close to the door; the
 zone stays as it is until players' feedback.
 
+## The doors between the games
+
+Done on 2026-11-07 (`docs/ROADMAP.md` of the BKBT repository, "Entrances shuffled across the games"; its
+`hack/DUALBOOT.md`, "The doors between the games", has both games' halves), dual-boot contract 5 and layout 0.14.0:
+with the combined world's option `cross_game_world_entrances` a door of the Lair can lead into a Tooie world, and a
+Tooie world entrance on the Isle o' Hags into a world of this game; a world's way out leads back to the door it is
+behind. The owner's decisions of that day: both games and the world in one go, each door keeping its own cost, and
+the forms as each game's own shuffle has them.
+
+- **Arrival anywhere.** `bkbt_init` takes any destination of this game's maps (`BKBT_DEST_TAG | map`, the map 1 to
+  `0xFF`, the exit a byte) as a door's arrival and keeps it (`sBkbtDoorDestMap`, `sBkbtDoorDestExit`), with the
+  links and the curtain as the hub door's ("The hub door"). The file select chooses the game as for the hub door
+  (`bkbt_doorChoose`) and starts it with `bkbt_doorWarp` at its three places (`src/core2/ch/gameSelect.c`: the door's
+  own start, and a new or loaded game the player chooses with A when none was left to choose): the hub door's
+  destination (the lobby at `0x12`) through `warp_lairEnterLairFromSMLevel` as before, any other straight through
+  `func_8031CC8C(0, (map << 8) + exit)`, the warp every door's `warp_*EnterLevel` takes (`src/core2/code_956B0.c`).
+  A world's entrance: a new game may start there, before it has seen the Lair or Spiral Mountain (`level_load` then
+  has no "entered from the Lair", so Banjo comes in without the entrance's animation). A lobby at a door's way out:
+  `FILEPROG_BD` is left as it is, so that the hub door still plays or skips the Lair's cutscene the first time.
+  The curtain lifts at the destination's map as at the hub door's (`bkbt_frame`).
+- **Back to Tooie.** An exit-map entry with `to_game` `BKBT_AP_GAME_TOOIE` (`bkbt_mapChange`), in a game a door
+  started with a return entry (`sBkbtDoorSession`, `sBkbtReturnEntry`): the curtain, `gameSelect_saveAndExit()` and
+  `bkbt_returnTo(to_map, to_exit)` with the save's link, as `bkbt_doorMapChange` does for the hub door's way out, and
+  it does not come back; counted in `bkbt_exits_taken`. The state there is the hub door's: the warp's or the pad's
+  fade has played and the game is still the map's. In a game started from the front end (the chord) or by itself
+  the entry is passed over, and the door leads where it does in retail. A form needs nothing: this game stops, and
+  the next boot arrives as Banjo.
+- **The client** writes BK's half of the mapping's exit maps (`worlds/banjo_kazooie_tooie/Entrances.py` of the BKBT
+  repository, `cross_exit_maps`): a Lair door into a Tooie world (its warp's request, in its lobby, to the world's
+  map at its entrance, in Tooie's numbering), and the way out of a BK world behind a Tooie entrance (its pad's
+  request, in its main map, to the Isle o' Hags map at that entrance's way back).
+- **The pause menu's Exit to Witch's Lair** would ask for a world's way out from any of its maps, and an entry
+  matches only the main map; but the N64's pause menu never offers it (`gcpausemenu_initReturnToLair` returns
+  TRUE, and the cursor then skips the choice: `src/core2/gc/pauseMenu.c:732-734`, `:1011-1013`, `:1024-1026`), so
+  the pad is a world's only way out.
+
+Checked on mupen64plus with the BKBT repository's `tools/dualboot_cross_check.py` on its `cross` image (a Tooie test
+build that takes an exit-map entry into this game as its exit guard would): BK's MM door into Tooie's Mayahem
+Temple and back to the lobby at the door, twice, and Tooie's Wooded Hollow entrance into MM, a new game and then the
+loaded one, back by MM's exit pad, with the curtain on every frame, both games' saves at each door and the links;
+and the whole suite. The owner's hand test passed on Project64 3.0.1, reported 2026-11-09
+(`docs/tutorials/27-cross-game-doors.md` of the BKBT repository); not checked on a console.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -1861,7 +1910,8 @@ zone stays as it is until players' feedback.
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
   2026-10-27, 66,768 with the Mumbo tokens of that day, 66,464 with the note doors of that day, 66,384
   with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29, 59,968 with the notes of 2026-10-30 and
-  56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`):
+  56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`) and 55,808 with the doors between the games of
+  2026-11-07 (`0x80398200`):
   the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of

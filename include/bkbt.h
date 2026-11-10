@@ -48,17 +48,24 @@ extern u8 bkbt_contract[];
 #define BKBT_FLAG_CHORD_ANYWHERE 0x00000001 /* the chord also works outside the front end */
 #define BKBT_FLAG_DOOR_TEST      0x00000002 /* tests: the countdown counts in the Lair's lobby, and then takes its exit */
 
-/* The hub door (contract 4; BKBT.md, "The hub door"). Tooie's Spiral Mountain entrance to its ruined Lair
- * starts this game with the destination BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY, WARP_GL_MM_LOBBY_12_ENTRANCE
- * and the link of the Tooie file at the door: the game boots into the file select, which chooses the save of
- * that link out of sight and starts it in the Lair. In a game started so, the Lair's way out to Spiral
- * Mountain saves and returns to Tooie with the destination Tooie's Spiral Mountain at the way out of its
- * ruined Lair, in Tooie's numbering (the Tooie side's DUALBOOT_DOOR_* in dualboot.h), and the save's link. */
+/* The doors (contract 4; BKBT.md, "The hub door" and "The doors between the games"). Tooie's Spiral Mountain
+ * entrance to its ruined Lair starts this game with the destination BKBT_DEST_TAG | MAP_69_GL_MM_LOBBY,
+ * WARP_GL_MM_LOBBY_12_ENTRANCE and the link of the Tooie file at the door: the game boots into the file select,
+ * which chooses the save of that link out of sight and starts it in the Lair. Since contract 5 any destination in
+ * this game's maps: a Tooie world entrance that leads into a world of this game, or the way out of a Tooie world
+ * behind one of the Lair's doors, starts the chosen game there (bkbt_doorWarp). In a game started so, the Lair's
+ * way out to Spiral Mountain saves and returns to Tooie with the destination Tooie's Spiral Mountain at the way
+ * out of its ruined Lair, in Tooie's numbering (the Tooie side's DUALBOOT_DOOR_* in dualboot.h), and the save's
+ * link; and the exit map's entries for Tooie (BKBT_AP_GAME_TOOIE) save and return to theirs. */
 #define BKBT_DEST_TAG 0x44530000          /* 'DS' in the high half; the map in the low */
 #define BKBT_DOOR_TOOIE_MAP  0x0AF        /* Tooie's BT_MAP_SM */
 #define BKBT_DOOR_TOOIE_EXIT 2
-bool bkbt_doorArrival(void);  /* this boot came through the hub door and its game has not started yet */
+bool bkbt_doorArrival(void);  /* this boot came through a door and its game has not started yet */
 void bkbt_doorArrived(void);  /* the file select started it */
+/* The file select starts a door's game with this (timedFunc_set_2): the hub door's destination as Spiral Mountain's
+ * entrance into the Lair goes (warp_lairEnterLairFromSMLevel: the Lair's cutscene, or its skip), any other straight
+ * to its map and exit. src/core1/code_0.c */
+void bkbt_doorWarp(s32 arg0, s32 arg1);
 /* game_changeMap, once a map change's fade has played: the Lair's way out to Spiral Mountain in a game the hub
  * door started saves and goes back to Tooie, and then does not return. src/core1/code_0.c */
 void bkbt_doorMapChange(s32 map, s32 exit);
@@ -345,17 +352,19 @@ bool bkbt_apNotesKept(void);
  * asks for while Banjo is in on_map, to og_map at og_exit, goes to to_map at to_exit instead (bkbt_mapChange, from
  * game_changeMap). Every boot starts it at 0, an empty table, which plays as retail; the client writes it before
  * the seed, as the items, so a seed that is not 0 means it is complete. to_game is the game the destination is in:
- * this one (BKBT_AP_GAME_BK) only for now; an entry for any other game is passed over, as if it were not there,
- * until the doors between the games are built. The client writes only the doors that do not lead where they do
- * in retail (worlds/banjo_kazooie/Entrances.py of the BKBT repository): BK's nine world entrances in the Lair, each
- * with its way out, which leads back to the door that was used. */
+ * this one (BKBT_AP_GAME_BK), or Tooie (BKBT_AP_GAME_TOOIE, since 0.14.0: in a game a door started, the change saves
+ * and returns to Tooie at to_map/to_exit, in Tooie's numbering, the doors between the games; in any other game the
+ * entry is passed over, as if it were not there). The client writes only the doors that do not lead where they do
+ * in retail (worlds/banjo_kazooie/Entrances.py and worlds/banjo_kazooie_tooie/Entrances.py of the BKBT repository):
+ * BK's nine world entrances in the Lair, each with its way out, which leads back to the door that was used, in
+ * whichever game it is. */
 #define BKBT_AP_EXIT_SLOTS 32
-#define BKBT_AP_GAME_TOOIE 2        /* a to_game this build passes over */
+#define BKBT_AP_GAME_TOOIE 2        /* a to_game in Tooie, taken only in a game a door started */
 typedef struct {
     u16 on_map;     /* +0x00: the map Banjo is in when the game asks (gsworld_getMap()); 0 ends the table */
     u16 og_map;     /* +0x02: the map the game asks for */
     u8 og_exit;     /* +0x04: the exit it asks for */
-    u8 to_game;     /* +0x05: BKBT_AP_GAME_BK, or the entry is passed over */
+    u8 to_game;     /* +0x05: BKBT_AP_GAME_BK or BKBT_AP_GAME_TOOIE; anything else is passed over */
     u16 to_map;     /* +0x06: in to_game's numbering, so a u16 for Tooie's maps; this game's fit a byte */
     u8 to_exit;     /* +0x08 */
     u8 padding[3];  /* +0x09: 0 */
@@ -389,7 +398,7 @@ void bkbt_quickTransform(void);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 13
+#define BKBT_AP_VERSION_MINOR 14
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything

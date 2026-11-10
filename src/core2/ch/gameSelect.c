@@ -417,13 +417,14 @@ void gameSelect_update(Actor *this) {
     controller_copyFaceButtons(0, face_buttons);
     controller_copyJoystick(0, &joystick);
 #if BKBT
-    /* The hub door (include/bkbt.h): once the client has committed the seed, the game the arrival plays is
-     * chosen by the link of the Tooie file at the door (bkbt_doorChoose, which may erase a save whose Tooie file
-     * is gone) and started out of sight, behind the curtain (bkbt_curtainUp): shown first
-     * (setGameInformationZoombox, which loads it for the file select as browsing does), then on this actor's
-     * next update started as A starts it, without its sounds, its animation or its "silly" start, straight into
-     * the Lair as the STARTING state below does for an arrival. The game gets the Tooie file's link, saved with
-     * it from its next save on. It is shown even when it is the game already shown, so that the score state is
+    /* A door (include/bkbt.h): once the client has committed the seed, the game the arrival plays is chosen by
+     * the link of the Tooie file at the door (bkbt_doorChoose, which may erase a save whose Tooie file is gone)
+     * and started out of sight, behind the curtain (bkbt_curtainUp): shown first (setGameInformationZoombox,
+     * which loads it for the file select as browsing does), then on this actor's next update started as A
+     * starts it, without its sounds, its animation or its "silly" start, straight to the door's destination as
+     * the STARTING state below does for an arrival (bkbt_doorWarp: the Lair's entrance for the hub door, a
+     * world's entrance or a lobby for a door between the games). The game gets the Tooie file's link, saved
+     * with it from its next save on. It is shown even when it is the game already shown, so that the score state is
      * its own after bkbt_doorChoose has erased it. With no game left to choose, the curtain lifts and the
      * player chooses. */
     if (bkbt_doorArrival() && !func_8038AAB0() && this->state == GAME_SELECT_IDLE && bkbt_apSettingsCommitted()) {
@@ -442,7 +443,7 @@ void gameSelect_update(Actor *this) {
             bkbt_playing_link = bkbt_doorLink();
             bkbt_doorArrived();
             chBottlesBonus_resetCompleted();
-            timedFunc_set_2(0.0f, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+            timedFunc_set_2(0.0f, (GenFunction_2) bkbt_doorWarp, 0, 0);
             timedFunc_set_1(0.0f, (GenFunction_1) gsworld_setEnableUpdate, 1);
             this->state = GAME_SELECT_DONE;
         }
@@ -542,15 +543,16 @@ void gameSelect_update(Actor *this) {
                          * arrival, which isn't saved, and a save loaded in Spiral
                          * Mountain doesn't show it either.
                          *
-                         * Through the hub door (include/bkbt.h) a new game starts in
-                         * the Lair, as a loaded one does below, with the Lair's
-                         * cutscene, which warp_lairEnterLairFromSMLevel plays while
-                         * FILEPROG_BD is not set, unless the setting
+                         * Through a door (include/bkbt.h) a new game starts at the
+                         * door's destination, as a loaded one does below
+                         * (bkbt_doorWarp): through the hub door in the Lair, with the
+                         * Lair's cutscene, which warp_lairEnterLairFromSMLevel plays
+                         * while FILEPROG_BD is not set, unless the setting
                          * skip_lair_cutscene skips it (since layout 0.12.0).
                          */
                         if (bkbt_doorArrival()) {
                             bkbt_doorArrived();
-                            timedFunc_set_2(0.0f, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+                            timedFunc_set_2(0.0f, (GenFunction_2) bkbt_doorWarp, 0, 0);
                             timedFunc_set_1(0.0f, (GenFunction_1) gsworld_setEnableUpdate, 1);
                         } else if (bkbt_apSettings()->skip_intro) {
                             timedFunc_set_3(0.0f, (GenFunction_3) transitionToMap, MAP_1_SM_SPIRAL_MOUNTAIN, WARP_SM_12_FROM_HOUSE, 1);
@@ -571,10 +573,10 @@ void gameSelect_update(Actor *this) {
 
                         // If player has gone into the lair, spawn them there
 #if BKBT
-                        /* and always through the hub door (include/bkbt.h) */
+                        /* and always at a door's destination (include/bkbt.h) */
                         if (bkbt_doorArrival()) {
                             bkbt_doorArrived();
-                            timedFunc_set_2(function_time, (GenFunction_2) warp_lairEnterLairFromSMLevel, 0, 0);
+                            timedFunc_set_2(function_time, (GenFunction_2) bkbt_doorWarp, 0, 0);
                         } else
 #endif
                         if (chmole_learnedAllSpiralMountainAbilities() && fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE)) {
@@ -615,7 +617,7 @@ void gameSelect_update(Actor *this) {
                      * from being read by the client */
                     bkbt_playing_seed = bkbt_ap_settings.seed;
                     bkbt_gameFile_loadAP(game_number);
-                    /* A game the player chooses at a hub door arrival (when bkbt_doorChoose found none) is
+                    /* A game the player chooses at a door's arrival (when bkbt_doorChoose found none) is
                      * the Tooie file's from now on */
                     if (bkbt_doorArrival()) {
                         bkbt_playing_link = bkbt_doorLink();

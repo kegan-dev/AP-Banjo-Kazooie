@@ -23,7 +23,7 @@ boot_core1_main = core1_main;
    symbol, so that the map carries the number for the tools that pair this ROM with a launcher and a
    payload. The C code takes it from here too, as (u32) bkbt_contract (include/bkbt.h), so this line is
    the only place that says it. It is the low byte of the launch token: keep it below 0x100. */
-bkbt_contract = 4;
+bkbt_contract = 5;
 ASSERT(bkbt_contract < 0x100, "BKBT: bkbt_contract does not fit the low byte of the launch token");
 
 /* Where this game's 0x4A0 bytes of save lie in the SRAM of the dual-boot image (32 KiB at cartridge address
