@@ -6,6 +6,9 @@
 #include "core2/statetimer.h"
 #include "core2/ba/anim.h"
 #include "core2/ba/physics.h"
+#if BKBT
+#include "bkbt.h"
+#endif
 
 extern void controller_copyJoystick(s32, f32*);
 extern f32 player_getYaw(void);
@@ -359,6 +362,10 @@ void func_8029B85C(ActorMarker *caller, enum asset_e text_id, s32 arg2){
 }
 
 void func_8029B890(void){
+#if BKBT
+    /* The end of every death, once: counted for death link (src/core1/code_0.c) */
+    bkbt_apDied();
+#endif
     if(!fileProgressFlag_get(FILEPROG_A8_HAS_DIED) && !volatileFlag_get(VOLATILE_FLAG_2_FF_IN_MINIGAME)){
         func_803114D0();
         if(bs_getState() == 0x54){

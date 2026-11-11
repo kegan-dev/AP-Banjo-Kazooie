@@ -452,7 +452,14 @@ void gWorldExitPad_update(Actor *this) {
             * (player_position[2] - this->position[2])
         ) < 3025.0f);
 
-    if ((this->unk38_31 == 0) && (phi_v0 == 0)) {
+    if ((this->unk38_31 == 0) && (phi_v0 == 0)
+#if BKBT
+        /* Mumbo's sequence lifts Banjo 90 units above the pad and sets him back on it (src/core2/bs/dronexform.c):
+         * that is no leaving of the pad, or a tag, a transform trap or D-pad left on it would take him out of the
+         * world as he lands (the owner's hand test, 2026-11-10; retail never transforms on a pad) */
+        && !baflag_isTrue(BA_FLAG_1B_TRANSFORMING)
+#endif
+    ) {
         this->unk38_31 = 1;
     }
     if ((this->unk38_31 == 1) && (phi_v0 == 1) 

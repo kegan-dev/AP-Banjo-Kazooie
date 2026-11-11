@@ -57,8 +57,8 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
    and the linker symbol `bkbt_sram_offset` with its assertions in `manual_syms.us.v10.txt`. From
    2026-10-14 to 2026-10-26 only inside the image, chosen by `bkbt_launched()` in `src/core1/code_0.c`,
    with retail's 512 bytes; by itself the ROM kept its EEPROM. The game record grew from `0x78` to `0x90`
-   bytes on 2026-10-26, to `0xA0` with the Jinjos of 2026-10-29 (item 19) and to `0x120` with the notes of
-   2026-10-30 (item 20).
+   bytes on 2026-10-26, to `0xA0` with the Jinjos of 2026-10-29 (item 19), to `0x120` with the notes of
+   2026-10-30 (item 20) and to `0x130` with the link of 2026-11-10 (item 24).
 7. **No new-game intro** (2026-10-14, at the owner's request): a new game starts in Spiral Mountain at the
    exit from Banjo's house, where the intro cutscenes end, instead of playing them. One call in
    `src/core2/ch/gameSelect.c`, in every hack build, by itself and in the dual-boot image ("The new-game
@@ -183,6 +183,13 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     the file select starts the door's game (`bkbt_doorWarp`), and an exit-map entry for Tooie, in a game a door
     started, saves and returns to Tooie at its destination. `include/bkbt.h`, `src/core1/code_0.c`,
     `src/core2/ch/gameSelect.c`, `manual_syms.us.v10.txt` ("The doors between the games" below).
+24. **The link: deaths, tags and traps, and infinite lives** (2026-11-10, layout 0.15.0; `docs/ROADMAP.md` of the
+    BKBT repository, the owner's next items 1 and 2): a client's deaths, tags and traps are applied when Banjo can
+    take them, his own deaths and D-pad left swaps are counted for it, D-pad left works in a world too, the traps
+    played are saved, and a death takes no life. `include/bkbt.h`, `include/save.h`, `src/core1/code_0.c`,
+    `src/core1/eeprom.c`, `src/core2/code_14420.c`, `src/core2/code_ABC00.c`, `src/core2/code_BEF20.c`, the save's
+    load and `clearScoreStates`, `manual_syms.us.v10.txt`, and a world's exit pad, which Mumbo's sequence no longer
+    arms (`src/core2/code_4C020.c`) ("The link: deaths, tags and traps, and infinite lives" below).
 
 ## The frame hook
 
@@ -359,8 +366,8 @@ Tooie hack keeps its save there from offset 0; this game's part starts at `bkbt_
 By itself the ROM has the same layout, and its header declares the SRAM, so that an emulator or a
 flashcart gives it one. So since 2026-10-26 (item 13 above); from 2026-10-14 until then only inside the
 image, chosen by `bkbt_launched()` and with retail's 512 bytes, while the ROM by itself kept its EEPROM.
-Since the Jinjos of 2026-10-29 (item 19) a game record was `0xA0` bytes, and since the notes of 2026-10-30
-(item 20) it is `0x120`.
+Since the Jinjos of 2026-10-29 (item 19) a game record was `0xA0` bytes, since the notes of 2026-10-30
+(item 20) `0x120`, and since the link of 2026-11-10 (item 24) it is `0x130`.
 The full description, with the SRAM map and what was run where, is in `hack/DUALBOOT.md` of the BKBT
 repository, "The save device".
 
@@ -373,13 +380,16 @@ repository, "The save device".
   Archipelago locations"), `u8 jinjos_checked[BKBT_AP_JINJO_LEVELS]` at `+0x8C..+0x95` ("Jinjos as
   Archipelago items and locations"), `u8 notes_collected[BKBT_AP_NOTE_BYTES]` at `+0x96..+0x112` ("Notes
   kept, and notes as Archipelago locations"), `u8 pad` at `+0x113`, `u32 link` at `+0x114..+0x117` (since
-  2026-11-02, from the spare bytes, "The hub door"), `u8 spare[4]` at `+0x118..+0x11B`, 0, kept for the hack,
-  then the checksum at `+0x11C`: `0x120` bytes since 2026-10-30 (`0xA0` from 2026-10-29, with 6 spare bytes at
+  2026-11-02, from the spare bytes, "The hub door"), `u8 traps_applied[BKBT_AP_TRAP_KINDS]` at `+0x118..+0x11C`
+  (since 2026-11-10, "The link: deaths, tags and traps, and infinite lives"), `u8 spare[15]` at `+0x11D..+0x12B`,
+  0, kept for the hack, then the checksum at `+0x12C`: `0x130` bytes since 2026-11-10 (`0x120` from 2026-10-30,
+  with `u8 spare[4]` at `+0x118` and the checksum at `+0x11C`; `0xA0` from 2026-10-29, with 6 spare bytes at
   `+0x96` and the checksum at `+0x9C`; `0x90` from 2026-10-26, with the checksum at `+0x8C`; retail `0x78`).
-  In the SRAM: the records at `0x7000`, `0x7120`, `0x7240`, `0x7360`, the global record at `0x7480`, this
-  game's part `0x7000..0x749F`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which a compile-time check there
-  holds at `0x4A0` and to whole EEPROM blocks. No magic or version of its own: a save of a build with
-  `0x78`-, `0x90`- or `0xA0`-byte records fails the checksum at the new places and shows as empty files.
+  In the SRAM: the records at `0x7000`, `0x7130`, `0x7260`, `0x7390`, the global record at `0x74C0`, this
+  game's part `0x7000..0x74DF`, `BKBT_SRAM_BYTES` (`src/core1/eeprom.c:31`), which a compile-time check there
+  holds at `0x4E0` and to whole EEPROM blocks. No magic or version of its own: a save of a build with
+  `0x78`-, `0x90`-, `0xA0`- or `0x120`-byte records fails the checksum at the new places and shows as empty
+  files.
 - **Where.** `src/core1/eeprom.c`, under `#if BKBT`: retail's `eeprom_writeBlocks` and `eeprom_readBlocks`
   are the `#else` (`:159-184`) and not in the hack build, and `bkbt_write` and `bkbt_read` (`:145-158`,
   declared in `include/core1/eeprom.h:4-12`) take their place, with `offset` and `count` in bytes from the
@@ -405,8 +415,8 @@ repository, "The save device".
 - **The offset** is the linker symbol `bkbt_sram_offset = 0x7000;` in `manual_syms.us.v10.txt`, used as
   `(u32) bkbt_sram_offset` (`include/bkbt.h`), so that the map carries it for the tools. `0x7000` is the
   border the two games share: below it the SRAM is the Tooie hack's. The link stops if the offset is
-  below `0x7000`, not a multiple of 8, or leaves fewer than `0x4A0` bytes in the 32 KiB (since the
-  notes; `0x2A0` with the Jinjos, `0x200` before, which no longer matched `BKBT_SRAM_BYTES` from 2026-10-26 on, harmless at
+  below `0x7000`, not a multiple of 8, or leaves fewer than `0x4E0` bytes in the 32 KiB (since the
+  link; `0x4A0` with the notes, `0x2A0` with the Jinjos, `0x200` before, which no longer matched `BKBT_SRAM_BYTES` from 2026-10-26 on, harmless at
   `0x7000`); the compile-time check in `src/core1/eeprom.c` keeps `BKBT_SRAM_BYTES` at that number. The Tooie side's copy is
   `DUALBOOT_BK_SRAM_OFFSET` in `hack/bt/n64/src/dualboot.h` of the BKBT repository, guarded by a
   `_Static_assert` in its `src/save.c`; nothing compares the two, so change both. The BKBT repository's
@@ -419,10 +429,10 @@ repository, "The save device".
   builds the same request (`epidma.c:46-58`), is not among the libultra files this ROM links, and both
   builds share that list (`decompressed.us.v10.yaml`).
 - **The buffer and the cache.** Every transfer goes through `sBkbtSramBuf`, on a 16-byte boundary inside
-  `sBkbtSramRaw` (`eeprom.c:42`) and `BKBT_SRAM_BYTES` (`0x4A0`, 74 whole cache lines) long, never
+  `sBkbtSramRaw` (`eeprom.c:42`) and `BKBT_SRAM_BYTES` (`0x4E0`, 78 whole cache lines) long, never
   through the caller's buffer, which shares cache lines with other variables. The buffer is written back
   before every transfer and invalidated after a read. Every transfer the game asks for has an SRAM offset
-  and a length that are multiples of 8 (`0x120`, `0x20` and the 8-byte wipe).
+  and a length that are multiples of 8 (`0x130`, `0x20` and the 8-byte wipe).
 - **The answers.** 0 for success; -1 (`CONT_RANGE_ERROR`) for a range outside `BKBT_SRAM_BYTES`, with
   nothing transferred (`offset < 0 || size <= 0 || size > BKBT_SRAM_BYTES - offset`, `:87`; the constant
   is cast to `s32`, so that the test stays signed: with `sizeof`'s unsigned type it wrapped, found by the
@@ -1890,9 +1900,93 @@ loaded one, back by MM's exit pad, with the curtain on every frame, both games' 
 and the whole suite. The owner's hand test passed on Project64 3.0.1, reported 2026-11-09
 (`docs/tutorials/27-cross-game-doors.md` of the BKBT repository); not checked on a console.
 
+## The link: deaths, tags and traps, and infinite lives
+
+Done on 2026-11-10 (`docs/ROADMAP.md` of the BKBT repository, the owner's next items 1 and 2, and hack feature 7),
+layout 0.15.0: death link, tag link and the five traps, as the Banjo-Tooie world has them, in this game too, for the
+solo world and for the combined slot, whose client gives each to the game being played; and infinite lives, as Tooie
+has them. The owner's decisions of 2026-11-09: a trap hits the game being played when it arrives, once; the
+Transform Trap plays Mumbo's transformation and leaves Banjo in the form he has; a tag transforms Banjo in a world
+only and waits in the Lair; D-pad left works in a world too, and sends a tag; infinite lives always, with no setting.
+
+- **The block.** `bkbt_ap_link` (`include/bkbt.h`, `BkbtApLink`: 20 bytes in core1's data, the anchor's `+0x1C`, the
+  anchor 32 bytes). The client writes `deaths_requested` and `tags_requested` (running totals this boot) and
+  `traps[5]` (the totals of each kind given to this game), a byte at a time and not through the seed's commit: a
+  death must not uncommit the items. The game writes `deaths` (Banjo's own deaths this boot), `deaths_applied`,
+  `tags` (forms changed with D-pad left this boot), `tags_applied` and `traps_applied[5]` (the counts played, saved
+  with the game). Every boot starts it at 0; the client keeps what it gave and the game did not apply, and asks for
+  it again after a boot (`worlds/banjo_kazooie/client/link.py` of the BKBT repository). The game acts on it only
+  while a client's seed is committed and a game is chosen (`bkbt_file_chosen`, `bkbt_apItemsAllowed`), from the end
+  of the world update (`bkbt_apLink`, in `func_80332E08`, `src/core2/code_ABC00.c`, after the Jinjo jiggy: never
+  while paused, after Banjo's update), and it publishes `traps_applied` there on every iteration.
+- **When the game takes a request** (`bkbt_linkCanAct`): Banjo is in the map and the game playing (`func_8028F070`),
+  not dying (a death state, `BS_5A_LOADZONE`, or health 0), not in a hurt state (whose interrupt handler,
+  `func_80296590`, `src/core2/code_EF50.c`, queues an interrupt instead of taking it), no cutscene's lock
+  (`func_8028EC04`), no transition, no text, no parade, Furnace Fun or minigame (volatile flags 1, 2 and `0x1F`),
+  not the cutscene level. A request waits until then.
+- **Deaths.** The end of every death, `func_8029B890` (`src/core2/code_14420.c`: health 0 in any form, drowning, a
+  death plane, the GV maze; a void-out is none), calls `bkbt_apDied`, which counts it in `deaths` unless the hack
+  caused it. A death requested is `func_8028F66C(BS_INTR_13_FF_DEATH_SQUARE)`, the interrupt Furnace Fun's death
+  squares raise, retried until the game takes it (2).
+- **Infinite lives.** In `func_803465E4` (`src/core2/code_BEF20.c`) the life a death costs (`item_dec(ITEM_16_LIFE)`,
+  at the respawn) is not taken: the counter keeps its value and never reaches 0, so the last life's game over
+  (`func_8029B62C`, `src/core2/code_14420.c`: `item_empty(ITEM_16_LIFE)` at the death's end) never comes. Always in
+  the hack build; the matching build keeps retail's. Extra lives add to a counter that is never spent.
+- **Traps**, one at a time: of the first kind whose count played is below the client's total and that can start
+  (`bkbt_trapStart`); one that cannot waits.
+  - trip: `func_8028F45C(9, a point 50 units ahead)`, the knockback of a hit, without its damage (`BS_56_RECOIL` for
+    Banjo, the forms' own bounces); not in the water;
+  - slip: five seconds of the slide timer (`STATE_TIMER_5_UNKNOWN`, refreshed at 0.18 s as the game's slopes do it,
+    `src/core2/code_D9B0.c`), which Banjo's ground states take as a slide (`player_isSliding`, `BS_32_SLIDE`); as
+    Banjo, standing, out of the water;
+  - transform: `player_transform(the form he has)`: Mumbo's sequence (the drone `BA_DRONE_TRANSFORM`,
+    `badrone_transform`), which ends as he was; not as the washing machine;
+  - squish: `BS_72_SPLAT`, the face-plant that ends a long fall, from standing, so without its damage; as Banjo;
+  - tip: one of Bottles' ten refreshers at the molehills (`sBkbtTips`), at random, with the flags `0xE` of Bottles'
+    own texts (8 holds Banjo still while it is up, so the A that turns its pages is no jump), counted as it closes
+    (its callback); a text gone without its callback (a map change) is given up after 30 iterations and comes again.
+
+  Every other kind counts as it starts. `bkbt_traps_applied` is saved at the record's `+0x118`
+  (`SaveData.traps_applied`), loaded with the chosen game (`bkbt_saveData_loadAP`, `src/core2/code_B5040.c`) and
+  zeroed by `clearScoreStates` (`src/core2/code_956B0.c`): a trap played is not played again after a reload, and a
+  new file plays every trap received.
+- **Tags.** D-pad left (`bkbt_quickTransform`, "The exit map and the quick transform") also answers in a world's own
+  level: in MM, BGS, FP, MMM or CCW, with that world's Mumbo paid, it toggles the world's form anywhere in it, with
+  the quick transform's gates; in another world it buzzes. Every form it changes, at a Lair door or in a world,
+  counts in `tags`. A tag requested (`bkbt_linkTag`) toggles the world's form the same way; outside the nine worlds
+  (the Lair, Spiral Mountain) it waits until Banjo is in one; in a world without a form, or with its Mumbo not paid, or in another form, it is spent
+  without effect, as Tooie spends a swap it cannot make.
+- **A world's exit pad** (actor `0x2E4`, `gWorldExitPad_update`, `src/core2/code_4C020.c`) arms once Banjo is out of
+  its zone (55 units around it, from 5 below to 30 above) and takes him out when he stands in it armed; the world's
+  entrance puts him on it unarmed. Mumbo's sequence lifts Banjo 90 units and sets him back where he stood
+  (`src/core2/bs/dronexform.c`), so on the pad it armed it and he left the world as he landed: a tag waiting outside
+  the worlds, which comes as he arrives, did it in the owner's hand test of 2026-11-10, and the transform trap and
+  D-pad left on the pad did the same in the check. The pad no longer arms while Banjo transforms
+  (`BA_FLAG_1B_TRANSFORMING`, which the sequence holds from its start to its end); retail never transforms on a pad.
+  The trip's knockback throws him about 160 units (`s_rebound_list`, `src/core2/code_117D0.c`), clear of the pad.
+- **The record** grew from `0x120` to `0x130` bytes for `traps_applied[5]`, with 15 spare bytes for the next counts
+  the hack keeps ("The save device"). Saves of earlier builds show as empty files.
+
+Checked on mupen64plus with the BKBT repository's `tools/bk_link_check.py` (a death requested; his own death, from a
+fall; two deaths requested on the last life; each trap, and the squish and the tip with a save, a reset and a
+reload; a tag in Mumbo's Mountain; a tag in the Lair and one in Spiral Mountain, which wait until Mumbo's Mountain;
+D-pad left in Mumbo's Mountain; each form watched on Mumbo's Mountain's exit pad to the end of Mumbo's sequence, and
+the trip and the transform trap there), the clients' tests and the whole suite. The check found two faults: the slip's call of
+`player_stateTimer_set` had no prototype in core1, so IDO passed its `f32` as a double and the timer held 60's bits,
+which the next tick takes to 0 (now `stateTimer_set`, declared in `core2/statetimer.h`); and the tip, shown with the
+flags 4, let the A that turns its pages make Banjo jump. The owner's hand test on Project64 3.0.1 (2026-11-10) passed
+every step and found the third, the exit pad, which the check had not watched long enough to see; the fix passed
+there by hand the same day. Not checked: the forms' traps and deaths, a console.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
+- **Every function hack code calls has a prototype in scope.** IDO compiles a call without one quietly, and then
+  passes an `f32` argument as a double, in other registers than the callee reads (the slip trap's timer, 2026-11-10).
+  `mips-linux-gnu-gcc -fsyntax-only -std=gnu89 -Werror=implicit-function-declaration`, with the Makefile's
+  `INCLUDE_CFLAGS`, `-nostdinc`, `-D_LANGUAGE_C -D_MIPS_SZLONG=32 -D_MIPS_SZINT=32 -DBKBT=1`, shows such calls in
+  the WSL distro (retail's own code has many, which matching keeps); declare what core2 does not, as
+  `src/core1/code_0.c` does for `func_8028EC04`, `func_8028F45C` and `func_8028F66C`.
 - **No uninitialised global in a file whose `.bss` is linked ahead of `checksums.c.o`.** The loader writes
   four checksum words at the start of each overlay's bss, over whatever is there. In core2 that file is
   `anctrl.c`; the level overlays have up to twenty. Give the variable an initial value, or put it in a
@@ -1910,8 +2004,9 @@ and the whole suite. The owner's hand test passed on Project64 3.0.1, reported 2
   libultra's EEPROM functions, 67,760 with the honeycombs of that day, 67,184 with the jiggies of
   2026-10-27, 66,768 with the Mumbo tokens of that day, 66,464 with the note doors of that day, 66,384
   with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29, 59,968 with the notes of 2026-10-30 and
-  56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`) and 55,808 with the doors between the games of
-  2026-11-07 (`0x80398200`):
+  56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`), 55,808 with the doors between the games of
+  2026-11-07 (`0x80398200`), 53,056 with the link of 2026-11-10 (`0x80398CC0`) and 53,024 with its exit pad
+  (`0x80398CE0`):
   the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
@@ -1961,7 +2056,10 @@ and the whole suite. The owner's hand test passed on Project64 3.0.1, reported 2
   `itemPrintValues`, which the jiggy check reads (the seed check writes `jiggyscore` to stand in for a
   pickup). Since the exit map of 2026-11-05 `bkbt_ap_exits` (the anchor check compares the anchor's `+0x18` with
   it), `bkbt_exits_taken`, `bkbt_quick_seen` and `bkbt_quick_done` (initialised globals, which the entrance and
-  transform checks read), and the game's own `bsStoredState` (`+8`, the form). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
+  transform checks read), and the game's own `bsStoredState` (`+8`, the form). Since the link of 2026-11-10
+  `bkbt_ap_link` (the anchor check compares the anchor's `+0x1C` with it, the link check reads and writes it) and
+  the game's own `stateTimerList` (the slide timer) and `badrone` (the drone's type), which the link check reads
+  with `D_80385F30` (the health and the lives). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
   and `D_803692F8` (the counters on the screen), which the token check reads (the seed check writes
   `sMumboTokenScore` to stand in for a pickup). Since the note doors of that day `bkbt_note_door_costs`,
   which the note-door check requires as the mark of a build with the note doors, and the game's own
@@ -2006,4 +2104,5 @@ and the whole suite. The owner's hand test passed on Project64 3.0.1, reported 2
     `0xFDA350`; 23,536 in that with the honeycombs, later that day, fill from `0xFDA410`; 23,376 in that
     with the jiggies of 2026-10-27, fill from `0xFDA4B0`; 23,104 in that with the Mumbo tokens of that
     day, fill from `0xFDA5C0`; 22,848 in that with the note doors of that day, fill from `0xFDA6C0`; 18,848 in
-    that with the exit map of 2026-11-05).
+    that with the exit map of 2026-11-05; 17,568 in that with the link of 2026-11-10, fill from `0xFDBB60`; 17,456 in
+    that with its exit pad, fill from `0xFDBBD0`).

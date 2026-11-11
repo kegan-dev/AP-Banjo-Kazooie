@@ -271,7 +271,12 @@ void func_803465E4(void){
     if(D_80385FE0){
         if(gctransition_done() || volatileFlag_get(VOLATILE_FLAG_0_IN_FURNACE_FUN_QUIZ)){
             if(D_80385FE4){
+#if BKBT
+                /* Infinite lives, as Tooie has (the owner's decision of 2026-11-09): the life a death costs is
+                 * not taken, so the last life's game over never comes (func_8029B62C, src/core2/code_14420.c) */
+#else
                 item_dec(ITEM_16_LIFE);
+#endif
                 code_73640_printItemCount(ITEM_14_HEALTH);
             }
             D_80385FE4 = FALSE;

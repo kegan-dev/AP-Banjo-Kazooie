@@ -221,6 +221,8 @@ void func_80332E08(void) {
 #if BKBT
     /* The level's Jinjo jiggy, once the client has sent its five Jinjos (src/core1/code_0.c) */
     bkbt_apJinjoJiggy();
+    /* And the link: deaths, tags and traps the client requests (src/core1/code_0.c) */
+    bkbt_apLink();
 #endif
 }
 

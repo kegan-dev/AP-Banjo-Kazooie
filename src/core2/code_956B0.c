@@ -1543,6 +1543,10 @@ void clearScoreStates(void) {
         bkbt_notes_collected[i] = 0;
         bkbt_ap_locations.notes[i] = 0;
     }
+    /* And the traps it played (the link) */
+    for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
+        bkbt_traps_applied[i] = 0;
+    }
 #endif
 }
 

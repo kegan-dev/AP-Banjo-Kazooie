@@ -9,6 +9,12 @@
 #include "bkbt.h"
 #include "save.h"
 #include "core2/abilityprogress.h"
+/* the link (bkbt_apLink): Banjo's interrupts and states, the slide timer, the frame's time, the tips' choice */
+#include "bsint.h"
+#include "bs_funcs.h"
+#include "core2/statetimer.h"
+#include "time.h"
+#include "rand.h"
 #endif
 
 s32 D_80275610 = 0; // always set to 0
@@ -884,7 +890,8 @@ BkbtApAnchor bkbt_ap_anchor = {
     &bkbt_ap_settings,
     &bkbt_ap_items,
     &bkbt_ap_locations,
-    &bkbt_ap_exits
+    &bkbt_ap_exits,
+    &bkbt_ap_link
 };
 
 /* mainLoop iterations on which bkbt_frame found the chord down, whether or not it went anywhere. For the
@@ -1294,37 +1301,309 @@ static bool bkbt_quickCanChange(void) {
         !volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE);
 }
 
-/* Banjo's update (func_80295C14, src/core2/bsmethods.c) asks this right after it reads the buttons, while Banjo is
- * in the map and in control. D-pad left, which the game itself never reads in play, in the Lair: near a door of
- * sBkbtQuickForms, as Banjo with that form paid for, he takes it, with Mumbo's own sparkle (player_transform), the
- * barriers re-armed first (each takes a form off once a map visit, and it may have done so already); in that form
- * there, he turns back. Anything else in the Lair gets Mumbo's buzzer. */
-void bkbt_quickTransform(void) {
-    s32 form;
+/* The link (include/bkbt.h). Initialised data: 0 from the first instruction of every boot, which the client reads
+ * as nothing done yet. A global, so that the map carries it for the tools. */
+BkbtApLink bkbt_ap_link = { 0 };
+u8 bkbt_traps_applied[BKBT_AP_TRAP_KINDS] = {0};
+
+/* The Mumbo form of a world's own level (sBkbtQuickForms), or 0: Mumbo's Mountain's termite, Bubblegloop Swamp's
+ * crocodile, Freezeezy Peak's walrus, Mad Monster Mansion's pumpkin, Click Clock Wood's bee. */
+static s32 bkbt_worldForm(s32 level) {
+    s32 i;
+
+    for (i = 0; i < (s32) (sizeof(sBkbtQuickForms) / sizeof(sBkbtQuickForms[0])); i++) {
+        if (sBkbtQuickForms[i][0] == level) {
+            return sBkbtQuickForms[i][1];
+        }
+    }
+    return 0;
+}
+
+/* The nine worlds, where D-pad left and a tag turn Banjo into the world's form; not the Lair, Spiral Mountain, the
+ * final battle or the cutscenes. */
+static bool bkbt_worldLevel(s32 level) {
+    switch (level) {
+        case LEVEL_1_MUMBOS_MOUNTAIN:
+        case LEVEL_2_TREASURE_TROVE_COVE:
+        case LEVEL_3_CLANKERS_CAVERN:
+        case LEVEL_4_BUBBLEGLOOP_SWAMP:
+        case LEVEL_5_FREEZEEZY_PEAK:
+        case LEVEL_7_GOBIS_VALLEY:
+        case LEVEL_8_CLICK_CLOCK_WOOD:
+        case LEVEL_9_RUSTY_BUCKET_BAY:
+        case LEVEL_A_MAD_MONSTER_MANSION:
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Mumbo has been paid for the form (src/core2/ch/mumbo.c: the five flags, in the forms' order) */
+static bool bkbt_formPaid(s32 form) {
+    return fileProgressFlag_get(FILEPROG_90_PAID_TERMITE_COST + form - TRANSFORM_2_TERMITE);
+}
+
+/* Into the form, as Banjo, with it paid for, or back into Banjo from it, with Mumbo's own sparkle (player_transform).
+ * TRUE when it went; the caller has asked bkbt_quickCanChange. */
+static bool bkbt_toggleForm(s32 form, bool lair) {
     s32 current;
 
-    if (!bakey_pressed(BUTTON_D_LEFT) || !bkbt_file_chosen || !bkbt_apItemsAllowed() || level_get() != LEVEL_6_LAIR) {
+    current = player_getTransformation();
+    if (current == TRANSFORM_1_BANJO && bkbt_formPaid(form)) {
+        if (lair) {
+            func_802D2CB8();    /* the Lair's barriers re-armed first: each takes a form off once a map visit */
+        }
+        return player_transform(form);
+    }
+    if (current == form) {
+        return player_transform(TRANSFORM_1_BANJO);
+    }
+    return FALSE;
+}
+
+/* Banjo's update (func_80295C14, src/core2/bsmethods.c) asks this right after it reads the buttons, while Banjo is
+ * in the map and in control. D-pad left, which the game itself never reads in play: in the Lair, near a door of
+ * sBkbtQuickForms, as Banjo with that form paid for, he takes it, the barriers re-armed first; in that form there,
+ * he turns back. Since the link (0.15.0) the same anywhere in a world with a form, in its own level. Each change
+ * counts a tag (bkbt_ap_link). Anything else in the Lair or a world gets Mumbo's buzzer. */
+void bkbt_quickTransform(void) {
+    s32 level;
+    s32 form;
+
+    if (!bakey_pressed(BUTTON_D_LEFT) || !bkbt_file_chosen || !bkbt_apItemsAllowed()) {
+        return;
+    }
+    level = level_get();
+    if (level == LEVEL_6_LAIR) {
+        form = bkbt_quickZoneForm();
+    } else if (bkbt_worldLevel(level)) {
+        form = bkbt_worldForm(level);
+    } else {
         return;
     }
     bkbt_quick_seen++;
-    form = bkbt_quickZoneForm();
-    current = player_getTransformation();
-    if (form != 0 && bkbt_quickCanChange()) {
-        if (current == TRANSFORM_1_BANJO &&
-            fileProgressFlag_get(FILEPROG_90_PAID_TERMITE_COST + form - TRANSFORM_2_TERMITE)) {
-            func_802D2CB8();
-            if (player_transform(form)) {
-                bkbt_quick_done++;
-                return;
-            }
-        } else if (current == form) {
-            if (player_transform(TRANSFORM_1_BANJO)) {
-                bkbt_quick_done++;
-                return;
-            }
-        }
+    if (form != 0 && bkbt_quickCanChange() && bkbt_toggleForm(form, level == LEVEL_6_LAIR)) {
+        bkbt_quick_done++;
+        bkbt_ap_link.tags++;
+        return;
     }
     coMusicPlayer_playMusic(COMUSIC_2C_BUZZER, 22000);
+}
+
+/* src/core2/code_7060.c, which no header declares: a cutscene's lock on Banjo; an interrupt from a point (the
+ * knockback); an interrupt */
+int func_8028EC04(void);
+bool func_8028F45C(s32 arg0, f32 arg1[3]);
+s32 func_8028F66C(enum bs_interrupt_e arg0);
+
+/* A death this game caused for a request: its end (bkbt_apDied) is not Banjo's own. */
+static bool sBkbtLinkDeath = FALSE;
+/* The trap playing (BKBT_AP_TRAP_*), or -1; how long the slip has left, in seconds; and how many iterations a tip's
+ * text has not been up, after which it is given up (and comes again) */
+static s32 sBkbtTrap = -1;
+static f32 sBkbtTrapTime = 0.0f;
+static s32 sBkbtTipGone = 0;
+
+#define BKBT_SLIP_SECONDS 5.0f
+#define BKBT_TIP_GONE_LIMIT 30
+/* The tip trap's texts: Bottles' refreshers at the molehills (moleTable, src/core2/ch/mole.c), US v1.0's */
+static const s16 sBkbtTips[] = {
+    ASSET_C24_DIALOG_BEAKBOMB_REFRESHER, ASSET_B4B_DIALOG_EGGS_REFRESHER, ASSET_B4C_DIALOG_BEAKBUSTER_REFRESHER,
+    ASSET_B4A_DIALOG_TALON_TROT_REFRESHER, ASSET_A23_DIALOG_SHOCKJUMP_REFRESHER, ASSET_A22_DIALOG_FLY_REFRESHER,
+    ASSET_D36_DIALOG_WONDERWING_REFRESHER, ASSET_C89_DIALOG_WADING_BOOTS_REFRESHER,
+    ASSET_A85_DIALOG_TURBOTRAINERS_REFRESHER, ASSET_F65_DIALOG_NOTEDOORS_REFRESHER,
+};
+
+/* func_8029B890 (src/core2/code_14420.c), the end of every real death, once: health 0 in any form, drowning, a
+ * death plane, the Gobi's Valley maze; not a void-out, which costs no life. Counted while the chosen game is
+ * played, unless this game caused it for a request. */
+void bkbt_apDied(void) {
+    if (sBkbtLinkDeath) {
+        sBkbtLinkDeath = FALSE;
+        return;
+    }
+    if (bkbt_file_chosen && bkbt_apSettingsCommitted()) {
+        bkbt_ap_link.deaths++;
+    }
+}
+
+/* Banjo is dying, in any form, or between maps */
+static bool bkbt_linkDying(void) {
+    switch (bs_getState()) {
+        case BS_41_DIE:
+        case BS_43_ANT_DIE:
+        case BS_4E_PUMPKIN_DIE:
+        case BS_54_SWIM_DIE:
+        case BS_64_CROC_DIE:
+        case BS_6D_WALRUS_DIE:
+        case BS_8A_BEE_DIE:
+        case BS_5A_LOADZONE:
+            return TRUE;
+    }
+    return item_getCount(ITEM_14_HEALTH) == 0;
+}
+
+/* Banjo is in the map and the game is playing, with nothing that a death or a trap would break: no text, transition,
+ * minigame, parade, cutscene or look-at lock, not dying, and not hurt (a hurt state queues an interrupt instead of
+ * taking it, func_80296590, src/core2/code_EF50.c). */
+static bool bkbt_linkCanAct(void) {
+    return func_8028F070() && !bkbt_linkDying() &&
+        bsList_getInterruptMethod(bs_getState()) != func_80296590 &&
+        func_8028EC04() == 0 &&
+        gctransition_done() && !gctransition_8030BDC0() && !gcdialog_hasCurrentTextId() &&
+        !volatileFlag_get(VOLATILE_FLAG_1) &&
+        !volatileFlag_get(VOLATILE_FLAG_2_FF_IN_MINIGAME) &&
+        !volatileFlag_get(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE) &&
+        level_get() != LEVEL_D_CUTSCENE;
+}
+
+/* A requested death: the death square's interrupt, which empties health and plays the death of the form Banjo has
+ * (func_80296608, src/core2/code_EF50.c); taken (2) in any state that takes interrupts, refused in a drone, the jig or
+ * Wishy-Washy, when it is tried again. */
+static void bkbt_linkDeath(void) {
+    if (bkbt_ap_link.deaths_applied == bkbt_ap_link.deaths_requested || !bkbt_linkCanAct()) {
+        return;
+    }
+    if (func_8028F66C(BS_INTR_13_FF_DEATH_SQUARE) == 2) {
+        sBkbtLinkDeath = TRUE;
+        bkbt_ap_link.deaths_applied++;
+    }
+}
+
+/* A requested tag: in one of the nine worlds, into its form or back, as D-pad left does; anywhere else (the Lair,
+ * Spiral Mountain) it waits until Banjo is in a world. In a world with no form, or with its Mumbo not paid, or in
+ * another form, it is spent without effect, as Tooie spends a swap that fails. */
+static void bkbt_linkTag(void) {
+    s32 level;
+    s32 form;
+    s32 current;
+
+    if (bkbt_ap_link.tags_applied == bkbt_ap_link.tags_requested) {
+        return;
+    }
+    level = level_get();
+    if (!bkbt_worldLevel(level) || !bkbt_linkCanAct()) {
+        return;
+    }
+    form = bkbt_worldForm(level);
+    current = player_getTransformation();
+    if (form == 0 || !bkbt_formPaid(form) || (current != TRANSFORM_1_BANJO && current != form)) {
+        bkbt_ap_link.tags_applied++;
+        return;
+    }
+    if (bkbt_quickCanChange() && bkbt_toggleForm(form, FALSE)) {
+        bkbt_ap_link.tags_applied++;
+    }
+}
+
+/* The tip's text has been closed: counted */
+static void bkbt_trapTipEnd(ActorMarker *marker, enum asset_e text_id, s32 arg2) {
+    if (sBkbtTrap == BKBT_AP_TRAP_TIP) {
+        bkbt_traps_applied[BKBT_AP_TRAP_TIP]++;
+        sBkbtTrap = -1;
+    }
+}
+
+/* Starts a trap of `kind`; TRUE when it started (and is counted, but for the tip, counted when its text closes). */
+static bool bkbt_trapStart(s32 kind) {
+    f32 position[3];
+    f32 yaw;
+    s32 form;
+
+    form = player_getTransformation();
+    switch (kind) {
+        case BKBT_AP_TRAP_TRIP:
+            /* knocked back, as a molehill's Bottles throws Banjo off (src/core2/ch/mole.c), from a point ahead */
+            if (player_getWaterState() != BSWATERGROUP_0_NONE) {
+                return FALSE;
+            }
+            player_getPosition(position);
+            yaw = yaw_get();
+            position[0] += 50.0f * ml_sin_deg(yaw);
+            position[2] += 50.0f * ml_cos_deg(yaw);
+            return func_8028F45C(9, position);
+        case BKBT_AP_TRAP_SLIP:
+            /* Banjo's ground states slide while the slide timer runs (player_isSliding, src/core2/playerutils.c) */
+            if (form != TRANSFORM_1_BANJO || !player_isStable() || player_getWaterState() != BSWATERGROUP_0_NONE) {
+                return FALSE;
+            }
+            sBkbtTrap = BKBT_AP_TRAP_SLIP;
+            sBkbtTrapTime = BKBT_SLIP_SECONDS;
+            return TRUE;
+        case BKBT_AP_TRAP_TRANSFORM:
+            /* Mumbo's sequence, into the form he has (badrone_transform, src/core2/bs/dronexform.c) */
+            if (!bkbt_quickCanChange() || form == TRANSFORM_7_WISHWASHY) {
+                return FALSE;
+            }
+            return player_transform(form);
+        case BKBT_AP_TRAP_SQUISH:
+            /* a face-plant; standing, the fall that would hurt is none (src/core2/bs/splat.c, ba/falldamage.c) */
+            if (form != TRANSFORM_1_BANJO || !bkbt_quickCanChange()) {
+                return FALSE;
+            }
+            bs_setState(BS_72_SPLAT);
+            return TRUE;
+        case BKBT_AP_TRAP_TIP:
+            /* 0xE as Bottles' own texts (src/SM/ch/smbottles.c): 8 holds Banjo still while it is up, so the A that
+             * turns its pages is no jump (src/core2/gc/dialog.c, gcdialog_showDialogConditional) */
+            if (!gcdialog_showDialog(sBkbtTips[randi2(0, sizeof(sBkbtTips) / sizeof(sBkbtTips[0]))], 0xE, NULL, NULL,
+                                     bkbt_trapTipEnd, NULL)) {
+                return FALSE;
+            }
+            sBkbtTrap = BKBT_AP_TRAP_TIP;
+            sBkbtTipGone = 0;
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* The traps: one at a time, of the first kind whose count played is below the client's total and that can start;
+ * one that cannot waits. The slip goes on for its seconds; the tip until its text closes. */
+static void bkbt_linkTrap(void) {
+    s32 kind;
+
+    if (sBkbtTrap == BKBT_AP_TRAP_SLIP) {
+        /* as the game refreshes it, src/core2/code_D9B0.c; stateTimer_set has its prototype here (core2/statetimer.h),
+         * player_stateTimer_set none, and without one the f32 is passed as a double */
+        stateTimer_set(STATE_TIMER_5_UNKNOWN, 0.18f);
+        sBkbtTrapTime -= time_getDelta();
+        if (sBkbtTrapTime <= 0.0f) {
+            sBkbtTrap = -1;
+        }
+        return;
+    }
+    if (sBkbtTrap == BKBT_AP_TRAP_TIP) {
+        if (!gcdialog_hasCurrentTextId() && ++sBkbtTipGone > BKBT_TIP_GONE_LIMIT) {
+            sBkbtTrap = -1;     /* the text went without its callback (a map change): it comes again */
+        }
+        return;
+    }
+    if (!bkbt_linkCanAct()) {
+        return;
+    }
+    for (kind = 0; kind < BKBT_AP_TRAP_KINDS; kind++) {
+        if (bkbt_ap_link.traps[kind] > bkbt_traps_applied[kind] && bkbt_trapStart(kind)) {
+            if (kind != BKBT_AP_TRAP_TIP) {
+                bkbt_traps_applied[kind]++;
+            }
+            return;
+        }
+    }
+}
+
+/* The end of the world update (func_80332E08, src/core2/code_ABC00.c), never while paused: what the client requests,
+ * while the chosen game is played. The traps played are published first, for the client and the tools. */
+void bkbt_apLink(void) {
+    s32 kind;
+
+    for (kind = 0; kind < BKBT_AP_TRAP_KINDS; kind++) {
+        bkbt_ap_link.traps_applied[kind] = bkbt_traps_applied[kind];
+    }
+    if (!bkbt_file_chosen || !bkbt_apItemsAllowed()) {
+        return;
+    }
+    bkbt_linkDeath();
+    bkbt_linkTag();
+    bkbt_linkTrap();
 }
 
 /* Called once per mainLoop iteration, after the game has taken its pad state and before the game update.

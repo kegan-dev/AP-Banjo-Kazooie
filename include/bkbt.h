@@ -381,9 +381,53 @@ extern BkbtApExits bkbt_ap_exits;
  * the change's game mode and level reset; TRUE when the exit map sent it elsewhere, *map and *exit then the new
  * destination. It also turns Banjo back into himself on his way between the Lair and a world. bkbt_quickTransform:
  * Banjo's update (func_80295C14, src/core2/bsmethods.c) asks it right after the buttons are read: D-pad left in
- * the Lair, near the door of a world with a Mumbo form paid for, transforms him (and back). */
+ * the Lair, near the door of a world with a Mumbo form paid for, transforms him (and back), and since 0.15.0
+ * anywhere in that world too (each counts a tag, bkbt_ap_link). */
 bool bkbt_mapChange(s32 mode, s32 reset_level, s32 *map, s32 *exit);
 void bkbt_quickTransform(void);
+
+/* The link (since 0.15.0: hack feature 7, death link, with the traps and tag link): what passes between this game
+ * and the other games of the multiworld while it is played. Unlike the blocks above, both sides write it, each its
+ * own fields: the client its requests (written directly, not through the seed's commit: a death must not take the
+ * items away for a frame), the game what it did. Every boot starts it at 0, and the game acts on it only while the
+ * seed is committed and a game is chosen (bkbt_apLink).
+ * - Deaths: a death the client requests (deaths_requested above deaths_applied) kills Banjo as soon as he can die,
+ *   and the game counts his own deaths (deaths), not those a request caused, for the client to send.
+ * - Tags (tag link, as Tooie's: its D-pad left swap): a tag the client requests turns Banjo into his world's Mumbo
+ *   form, or back, in a world only (elsewhere it waits); D-pad left that changes his form counts one (tags).
+ * - Traps: the client writes the totals of each kind given to this game, and the game plays them one at a time
+ *   while the counts it has played, saved with the game (bkbt_traps_applied, SaveData.traps_applied), are below. The
+ *   kinds are Tooie's, in its order (pc.traps of the Tooie hack, shared/include/ap_memory/items.h). */
+#define BKBT_AP_TRAP_KINDS 5
+#define BKBT_AP_TRAP_TRIP 0         /* knocked back, without damage */
+#define BKBT_AP_TRAP_SLIP 1         /* five seconds of sliding */
+#define BKBT_AP_TRAP_TRANSFORM 2    /* Mumbo's transformation, back into the form he has */
+#define BKBT_AP_TRAP_SQUISH 3       /* a face-plant, without damage */
+#define BKBT_AP_TRAP_TIP 4          /* one of Bottles' refreshers */
+typedef struct {
+    u8 deaths_requested;                  /* +0x00: client: deaths to apply this boot, in all */
+    u8 tags_requested;                    /* +0x01: client: tags to apply this boot, in all */
+    u8 traps[BKBT_AP_TRAP_KINDS];         /* +0x02: client: the traps of each kind given to this game, in all */
+    u8 padding;                           /* +0x07: 0 */
+    u8 deaths;                            /* +0x08: game: Banjo's own deaths this boot */
+    u8 deaths_applied;                    /* +0x09: game: requested deaths applied this boot */
+    u8 tags;                              /* +0x0A: game: forms changed with D-pad left this boot */
+    u8 tags_applied;                      /* +0x0B: game: requested tags applied (or spent) this boot */
+    u8 traps_applied[BKBT_AP_TRAP_KINDS]; /* +0x0C: game: the traps of each kind played, saved with the game */
+    u8 padding2[3];                       /* +0x11: 0 */
+} BkbtApLink;                             /* 20 bytes */
+
+extern BkbtApLink bkbt_ap_link;
+
+/* The traps of each kind the chosen game has played (src/core1/code_0.c): loaded and saved with it
+ * (SaveData.traps_applied), zeroed by clearScoreStates, published in bkbt_ap_link. */
+extern u8 bkbt_traps_applied[BKBT_AP_TRAP_KINDS];
+
+/* src/core1/code_0.c. bkbt_apDied: the end of every death (func_8029B890, src/core2/code_14420.c), once. bkbt_apLink:
+ * the end of the world update (func_80332E08, src/core2/code_ABC00.c), never while paused: deaths, tags and traps
+ * applied. */
+void bkbt_apDied(void);
+void bkbt_apLink(void);
 
 /* The Archipelago anchor (docs/ROADMAP.md of the BKBT repository, hack feature 1). Everything the client
  * reads or writes moves with every build, so the client starts from the one word that does not: physical
@@ -398,7 +442,7 @@ void bkbt_quickTransform(void);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 14
+#define BKBT_AP_VERSION_MINOR 15
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -418,7 +462,8 @@ typedef struct {
     BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0, 92 since 0.10.0) */
     BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0, 336 since 0.10.0) */
     BkbtApExits *exits;         /* +0x18: &bkbt_ap_exits, which the client writes (since 0.13.0) */
-} BkbtApAnchor;                 /* 28 bytes */
+    BkbtApLink *link;           /* +0x1C: &bkbt_ap_link, which both write, each its own fields (since 0.15.0) */
+} BkbtApAnchor;                 /* 32 bytes since 0.15.0 (28 from 0.13.0) */
 
 extern BkbtApAnchor bkbt_ap_anchor;
 

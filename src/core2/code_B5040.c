@@ -408,6 +408,10 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
     }
     /* The link to its Tooie file: a hub door arrival sets the Tooie file's after this (bkbt_doorChoose) */
     bkbt_playing_link = saveData->link;
+    /* The traps it has played, so that the client's totals bring only the ones still owed */
+    for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
+        bkbt_traps_applied[i] = saveData->traps_applied[i];
+    }
 }
 #endif
 
@@ -442,6 +446,9 @@ void saveData_create(SaveData *savedata){
         savedata->notes_collected[i] = bkbt_notes_collected[i];
     }
     savedata->link = bkbt_playing_link;
+    for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
+        savedata->traps_applied[i] = bkbt_traps_applied[i];
+    }
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));
 }
