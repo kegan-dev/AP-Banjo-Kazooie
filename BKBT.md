@@ -194,6 +194,10 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     client gives refills of blue eggs, red feathers, gold feathers or the less full feather, and the game fills that
     count to its cap, once each, the refills applied saved with the game. `include/bkbt.h`, `include/save.h`,
     `src/core1/code_0.c`, the save's load and `clearScoreStates` ("Refills" below).
+26. **The end of a played game in the image** (2026-11-12; `docs/ROADMAP.md` of the BKBT repository, the owner's
+    next item 4): Save and Quit and the ending go back to Tooie's title instead of the opening logos when the image's
+    launcher started this game. `src/core1/code_0.c` (`bkbt_doorMapChange`), and comments in `src/core2/code_5C870.c`
+    and `src/core2/gc/pauseMenu.c` ("The end of a played game in the image" below).
 
 ## The frame hook
 
@@ -1738,7 +1742,7 @@ ruined Lair starts this game with the destination `BKBT_DEST_TAG | MAP_69_GL_MM_
   same function, `func_8030AFD8`) and `bkbt_returnTo(BKBT_DOOR_TOOIE_MAP, BKBT_DOOR_TOOIE_EXIT)`, Tooie's Spiral
   Mountain at exit 2, with the save's link, and does not come back. Every other map change loads as in retail.
   A session started from the front end keeps BK's own Spiral Mountain. The chord and the countdown return with no destination and no
-  link (`bkbt_return` is `bkbt_returnTo(0, 0)`).
+  link (`bkbt_return` is `bkbt_returnTo(0, 0)`), and so does the end of a played game in the image (below).
 - **The test.** With `BKBT_FLAG_DOOR_TEST` the countdown counts only in `MAP_69` in game mode 3 and then calls
   `warp_smExitLair(0, 0)` as if Banjo had walked out.
 
@@ -1767,7 +1771,8 @@ matching build keeps both):
   `FILEPROG_BD` is set and Furnace Fun is not done; otherwise it takes its other way, which the hack now
   always takes: Save and Quit sets `PAUSE_STATE_14_EXIT_GAME` after its save (`src/core2/gc/pauseMenu.c`), the
   last life `func_8029B62C`'s first branch (`src/core2/code_14420.c`), both the music faded and the opening
-  logos (`MAP_1F`) five seconds on. The game-over save is the level change's on the way (`game_loadMap`'s
+  logos (`MAP_1F`) five seconds on; in the image Tooie's title instead since 2026-11-12 ("The end of a played game
+  in the image"). The game-over save is the level change's on the way (`game_loadMap`'s
   `func_8030AFD8(1)`, `src/core2/gc/section.c`), not the cutscene's, so it is made either way.
 
 Checked on mupen64plus with the BKBT repository's `tools/dualboot_door_check.py` (a new game's first trip
@@ -2020,6 +2025,38 @@ Checked on mupen64plus with the BKBT repository's `tools/bk_refill_check.py` (ea
 ways, Cheato's caps, a refill spent while full, a lower total, and one remembered across a save, a reset and a
 reload), the clients' tests and the whole suite. The owner's hand test passed on ares v148 on 2026-11-11, every step,
 the combined slot's nests included. Not checked: Mr. Vile's quiet counter, a console.
+
+## The end of a played game in the image
+
+2026-11-12, the owner's next item 4 (the owner's decisions of 2026-11-11: every game the image plays, the hub door's,
+a door between the games' and one chosen at the file select after the chord, and the ending too). Retail sends a
+played game that ends to the opening logos (`MAP_1F_CS_START_RAREWARE`), from where the player had to press L + R +
+Start to get back to Tooie. When the image's launcher started this game (a return entry), that change goes back to
+Tooie with no destination instead, and Tooie boots to its title as after the chord; nothing of the dual-boot
+contract changes (the BKBT repository's `hack/DUALBOOT.md`, "The return").
+
+- **Where.** `bkbt_doorMapChange` (`src/core1/code_0.c`), which `game_changeMap` (`src/core2/code_5C870.c`) asks first
+  about every map change, once the change's fade has played: with a return entry, a change to `MAP_1F` while
+  `bkbt_file_chosen` raises the curtain (the screen black, what is left of the sound muted), makes the change's own
+  save and calls `bkbt_returnTo(0, 0)` (no destination, no link, the anchor withdrawn), and does not come back.
+- **The save** is the one the change would make, `gameSelect_saveAndExit` from `game_loadMap`'s `func_8030AFD8(1)`,
+  which saves only from a level 1..12: Save and Quit's game is saved again, as in retail, and the ending's change, from
+  a cutscene map, saves nothing, as in retail (the game was saved as Banjo left the final battle).
+- **What comes there.**
+  - Save and Quit: `PAUSE_STATE_14_EXIT_GAME` (`src/core2/gc/pauseMenu.c`), after the save at the yes, five seconds
+    with the music fading, then `transitionToMap(MAP_1F, 0, 1)` and its transition.
+  - The ending: the final parade's end (request 10, `gcparade_8031ABA0`, `src/core2/gc/parade.c`) clears the score
+    state and reloads the game, which chooses it again (`bkbt_gameFile_loadAP`); the not-100% or the 100% ending
+    (`MAP_20` or `MAP_95`, then `MAP_98` or `MAP_99`) then goes to the logos (`src/core2/code_956B0.c`).
+  - The last life (`func_8029B5EC`), which infinite lives no longer reach.
+- **What does not.** The front end's own way back to the logos, after the attract demos, runs with no game chosen
+  (`clearScoreStates`: the boot, the file select, the demos), and BK by itself has no return entry: its logos stay.
+
+Checked on mupen64plus with the BKBT repository's `tools/bk_exit_check.py`: Save and Quit and the ending in the image
+(`--expect tooie`: Tooie's title, no arrival, the save) and by themselves (`--expect logos`), and the whole suite. The
+ending there is the final parade's last request written into `sGameState`, not the final battle. The owner's hand
+test passed on Project64 3.0.1 on 2026-11-12, every step: Save and Quit in a game the hub door started and in one
+chosen at the file select, and BK by itself still at its logos. Not checked: the ending by hand, a console.
 
 ## Rules for new code
 

@@ -1083,7 +1083,8 @@ s32 gcPauseMenu_update(void) {
 
 #if BKBT
                     /* No game-over cutscene (MAP_83): the exit retail takes before the Lair and after Furnace
-                     * Fun, the logos five seconds on (PAUSE_STATE_14_EXIT_GAME; the owner's wish, 2026-11-04) */
+                     * Fun, the logos five seconds on (PAUSE_STATE_14_EXIT_GAME; the owner's wish, 2026-11-04); in
+                     * the image Tooie's title instead, at the change to the logos (bkbt_doorMapChange, 2026-11-12) */
                     gcPauseMenu_setState(PAUSE_STATE_14_EXIT_GAME);
 #else
                     if (!fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE) ||

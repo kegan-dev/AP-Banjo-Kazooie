@@ -1214,9 +1214,28 @@ s32 bkbt_doorChoose(void) {
  * which calls gameSelect_saveAndExit), which this makes instead, synchronously (src/core1/eeprom.c), before the
  * return. The curtain falls first: the screen is black already, and it mutes the out jingle's tail. Any other
  * map change, a game started from the front end, and a map change whose destination something changed during
- * the fade, load as in retail. */
+ * the fade, load as in retail.
+ *
+ * And in the image, in any game (a door's or one chosen at the file select), the end of a played game goes back to
+ * Tooie's title instead of this game's opening logos (the owner's next item 4, decided 2026-11-11): Save and Quit
+ * (PAUSE_STATE_14_EXIT_GAME, src/core2/gc/pauseMenu.c: five seconds, the music faded, then the change to MAP_1F),
+ * the ending (the final parade's end reloads the game, gcparade_8031ABA0, which makes it chosen again, then its
+ * cutscenes go to MAP_1F, src/core2/code_956B0.c) and the last life, which no longer comes. The front end's own way
+ * to the logos (the attract demos) runs with no game chosen (clearScoreStates). The save is the one this change
+ * would make (game_loadMap's func_8030AFD8): from a level, so Save and Quit's again, and none from the ending's
+ * cutscene map, as in retail; then the return with no destination and no link, as the chord's: Tooie boots to its
+ * title. */
 void bkbt_doorMapChange(s32 map, s32 exit) {
-    if (!sBkbtDoorSession || sBkbtReturnEntry == NULL) {
+    if (sBkbtReturnEntry == NULL) {
+        return;
+    }
+    if (map == MAP_1F_CS_START_RAREWARE && bkbt_file_chosen) {
+        sBkbtCurtain = TRUE;
+        osViBlack(TRUE);
+        gameSelect_saveAndExit();
+        bkbt_returnTo(0, 0);
+    }
+    if (!sBkbtDoorSession) {
         return;
     }
     if (map != MAP_1_SM_SPIRAL_MOUNTAIN || exit != WARP_SM_13_LAIR_ENTRANCE || gsworld_getMap() != MAP_69_GL_MM_LOBBY) {
