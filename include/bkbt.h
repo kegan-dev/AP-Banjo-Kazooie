@@ -147,7 +147,7 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 
 /* The items the player has received (hack feature 3: the moves since layout 0.3.0, the empty honeycombs
  * since 0.5.0, the jiggies since 0.6.0, the Mumbo tokens since 0.7.0, the note doors since 0.8.0, the
- * Jinjos since 0.10.0, the Notes since 0.11.0). The client writes them and this
+ * Jinjos since 0.10.0, the Notes since 0.11.0, the refills since 0.16.0). The client writes them and this
  * game only reads them: one writer. They are totals, written again and again, so a repeated write gives
  * nothing new. The seed commits these as well: the client writes the settings and the items first and
  * the seed last, and starts from seed 0 to change them in a running game. Every boot starts them at 0,
@@ -185,6 +185,17 @@ bool bkbt_apSettingsCommitted(void);         /* src/core1/code_0.c: TRUE once th
 #define BKBT_AP_NOTE_INDEX(level, n) (((level) - 1) * BKBT_AP_NOTES_PER_LEVEL + (n))
 #define BKBT_AP_HUT_NOTE_FIRST 95  /* n of the first of a hut's five notes, in levels 1 and 4 */
 #define BKBT_AP_NOTE_MAX 900       /* Notes received: more reads as this */
+/* The refills (since 0.16.0; docs/ROADMAP.md of the BKBT repository, the owner's next item 3): the totals of each
+ * kind given to this game, which it applies one at a time while the count it has applied, saved with the game
+ * (bkbt_refills_applied, SaveData.refills_applied), is behind. A refill fills its count to the most it can hold, as
+ * the Lair's refill pillows do (src/lair/ch/refillpillow.c); one that comes while the count is full is spent. The
+ * counts wrap at 256: the game applies a kind when the total is 1..127 ahead of its count, and a total behind it
+ * (a client that has not read which game got what yet) gives nothing. */
+#define BKBT_AP_REFILL_KINDS 4
+#define BKBT_AP_REFILL_EGGS 0      /* blue eggs */
+#define BKBT_AP_REFILL_RED 1       /* red feathers */
+#define BKBT_AP_REFILL_GOLD 2      /* gold feathers */
+#define BKBT_AP_REFILL_FEATHER 3   /* the less full feather, red or gold (Tooie's Feather Nest in the combined slot) */
 
 typedef struct {
     u8 moves[BKBT_AP_MOVE_COUNT]; /* +0x00: indexed by enum ability_e; not 0 = received */
@@ -197,7 +208,9 @@ typedef struct {
     u8 jinjos[BKBT_AP_JINJO_SLOTS]; /* +0x28: indexed by BKBT_AP_JINJO_INDEX; not 0 = received (since 0.10.0) */
     u16 notes;                    /* +0x5A: Notes received; more than BKBT_AP_NOTE_MAX reads as that (since 0.11.0;
                                    * the game reads it only with notesanity) */
-} BkbtApItems;                    /* 92 bytes since 0.10.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0, 40 in 0.8.0 and 0.9.0) */
+    u8 refills[BKBT_AP_REFILL_KINDS]; /* +0x5C: the refills of each kind given, in all, mod 256 (since 0.16.0) */
+} BkbtApItems;                    /* 96 bytes since 0.16.0 (20 in 0.3.0 and 0.4.0, 24 from 0.5.0 to 0.7.0, 40 in 0.8.0 and
+                                   * 0.9.0, 92 from 0.10.0 to 0.15.0) */
 
 extern BkbtApItems bkbt_ap_items;
 
@@ -423,6 +436,10 @@ extern BkbtApLink bkbt_ap_link;
  * (SaveData.traps_applied), zeroed by clearScoreStates, published in bkbt_ap_link. */
 extern u8 bkbt_traps_applied[BKBT_AP_TRAP_KINDS];
 
+/* The refills of each kind the chosen game has applied (src/core1/code_0.c): loaded and saved with it
+ * (SaveData.refills_applied), zeroed by clearScoreStates (since 0.16.0; the tools read it from the map). */
+extern u8 bkbt_refills_applied[BKBT_AP_REFILL_KINDS];
+
 /* src/core1/code_0.c. bkbt_apDied: the end of every death (func_8029B890, src/core2/code_14420.c), once. bkbt_apLink:
  * the end of the world update (func_80332E08, src/core2/code_ABC00.c), never while paused: deaths, tags and traps
  * applied. */
@@ -442,7 +459,7 @@ void bkbt_apLink(void);
 #define BKBT_AP_GAME_BK 1          /* the Tooie hack would be 2 */
 /* The version of this layout, not of the Archipelago world. Raise it when the layout changes. */
 #define BKBT_AP_VERSION_MAJOR 0
-#define BKBT_AP_VERSION_MINOR 15
+#define BKBT_AP_VERSION_MINOR 16
 #define BKBT_AP_VERSION_PATCH 0
 
 /* What the anchor points to. A client checks magic, game_id and the version before it trusts anything
@@ -459,7 +476,7 @@ typedef struct {
     u8 version_minor;           /* +0x0A */
     u8 version_patch;           /* +0x0B */
     BkbtApSettings *settings;   /* +0x0C: &bkbt_ap_settings, which the client writes (since 0.2.0) */
-    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0, 92 since 0.10.0) */
+    BkbtApItems *items;         /* +0x10: &bkbt_ap_items, which the client writes (since 0.3.0; 24 bytes since 0.5.0, 40 since 0.8.0, 92 since 0.10.0, 96 since 0.16.0) */
     BkbtApLocations *locations; /* +0x14: &bkbt_ap_locations, which the game writes and the client reads (since 0.4.0; 48 bytes since 0.5.0, 152 since 0.6.0, 268 since 0.7.0, 284 since 0.8.0, 336 since 0.10.0) */
     BkbtApExits *exits;         /* +0x18: &bkbt_ap_exits, which the client writes (since 0.13.0) */
     BkbtApLink *link;           /* +0x1C: &bkbt_ap_link, which both write, each its own fields (since 0.15.0) */

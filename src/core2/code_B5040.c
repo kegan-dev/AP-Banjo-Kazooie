@@ -412,6 +412,10 @@ void bkbt_saveData_loadAP(SaveData *saveData) {
     for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
         bkbt_traps_applied[i] = saveData->traps_applied[i];
     }
+    /* The refills it has applied, saved with the counts they filled (__savedata_8033CA2C) */
+    for (i = 0; i < BKBT_AP_REFILL_KINDS; i++) {
+        bkbt_refills_applied[i] = saveData->refills_applied[i];
+    }
 }
 #endif
 
@@ -448,6 +452,9 @@ void saveData_create(SaveData *savedata){
     savedata->link = bkbt_playing_link;
     for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
         savedata->traps_applied[i] = bkbt_traps_applied[i];
+    }
+    for (i = 0; i < BKBT_AP_REFILL_KINDS; i++) {
+        savedata->refills_applied[i] = bkbt_refills_applied[i];
     }
 #endif
     savedata_update_crc(savedata, sizeof(SaveData));

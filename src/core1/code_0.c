@@ -453,6 +453,74 @@ static void bkbt_apTokens(void) {
     bkbt_apGiveHeld(ITEM_1C_MUMBO_TOKEN, MIN(bkbt_ap_items.tokens, BKBT_AP_TOKEN_MAX), &bkbt_tokens_given, FALSE);
 }
 
+/* The refills the chosen game has applied (include/bkbt.h, since 0.16.0). Initialised data, as the traps' are. */
+u8 bkbt_refills_applied[BKBT_AP_REFILL_KINDS] = {0};
+
+/* The most a count of eggs or feathers holds, as item_adjustByDiff clamps it (src/core2/code_BEF20.c): doubled once
+ * Cheato's sandcastle cheat for it has shown its text (src/TTC/ch/castle.c, src/core2/progressDialog.c) */
+static s32 bkbt_refillCap(enum item_e item) {
+    switch (item) {
+        case ITEM_D_EGGS:
+            return fileProgressFlag_get(FILEPROG_BE_CHEATO_BLUEEGGS) ? 200 : 100;
+        case ITEM_F_RED_FEATHER:
+            return fileProgressFlag_get(FILEPROG_BF_CHEATO_REDFEATHERS) ? 100 : 50;
+        default:
+            return fileProgressFlag_get(FILEPROG_C0_CHEATO_GOLDFEATHERS) ? 20 : 10;
+    }
+}
+
+/* The count a refill of `kind` fills: the feather kind's is the less full of the two, red on a tie */
+static enum item_e bkbt_refillItem(s32 kind) {
+    switch (kind) {
+        case BKBT_AP_REFILL_EGGS:
+            return ITEM_D_EGGS;
+        case BKBT_AP_REFILL_RED:
+            return ITEM_F_RED_FEATHER;
+        case BKBT_AP_REFILL_GOLD:
+            return ITEM_10_GOLD_FEATHER;
+    }
+    /* red / its cap <= gold / its cap, without a division */
+    if (item_getCount(ITEM_F_RED_FEATHER) * bkbt_refillCap(ITEM_10_GOLD_FEATHER) <=
+        item_getCount(ITEM_10_GOLD_FEATHER) * bkbt_refillCap(ITEM_F_RED_FEATHER)) {
+        return ITEM_F_RED_FEATHER;
+    }
+    return ITEM_10_GOLD_FEATHER;
+}
+
+/* The refills (include/bkbt.h), on every mainLoop iteration while the chosen game is in play: the first kind whose
+ * total is ahead of the count applied, one kind per iteration, filled as the Lair's refill pillows fill it
+ * (src/lair/ch/refillpillow.c: item_setMaxCount, which item_adjustByDiff clamps to the cap) with the pillow's sound
+ * and the counter counting up; quietly while Mr. Vile's counter shows, as retail's pickups go
+ * (src/core2/ch/collectible.c). A refill while the count is full is spent all the same. Only while Banjo is about,
+ * as for the jiggies. */
+static void bkbt_apRefills(void) {
+    s32 kind;
+    u8 ahead;
+    enum item_e item;
+    bool quiet;
+
+    if (!bkbt_file_chosen || !bkbt_apItemsAllowed() || !func_8028F070() || player_isDead()) {
+        return;
+    }
+    for (kind = 0; kind < BKBT_AP_REFILL_KINDS; kind++) {
+        ahead = bkbt_ap_items.refills[kind] - bkbt_refills_applied[kind];
+        if (ahead == 0 || ahead >= 0x80) {
+            continue;   /* nothing new, or a total behind the count: a client that has not read its shares yet */
+        }
+        item = bkbt_refillItem(kind);
+        quiet = func_802FADD4(ITEM_1B_VILE_VILE_SCORE);
+        /* the counter counts up from what it shows, which is out of date when it has been off the screen */
+        if (!quiet && !func_802FADD4(item)) {
+            itemPrintValues[item] = item_getCount(item);
+        }
+        item_adjustByDiff(item, 9999999, quiet);    /* item_setMaxCount (src/core2/code_BEF20.c), undeclared here */
+        coMusicPlayer_playMusic(item == ITEM_D_EGGS ? SFX_EGG_REFILL :
+                                item == ITEM_F_RED_FEATHER ? SFX_RED_FEATHER_REFILL : SFX_GOLD_FEATHER_REFILL, -1);
+        bkbt_refills_applied[kind] = bkbt_ap_items.refills[kind];
+        return;
+    }
+}
+
 /* The note doors' thresholds (include/bkbt.h), on every mainLoop iteration while the chosen game is in
  * play: reached once the total of the worlds' best note counts, the total retail's doors compare with
  * their costs, reaches a door's cost. The best counts change as notes are picked up, not only when a
@@ -1619,6 +1687,7 @@ void bkbt_frame(void) {
     bkbt_apHoneycombs();
     bkbt_apJiggies();
     bkbt_apTokens();
+    bkbt_apRefills();
     bkbt_apNotes();     /* before the thresholds, which read the Notes received */
     bkbt_apNoteDoors();
     bkbt_apGoal();

@@ -1547,6 +1547,10 @@ void clearScoreStates(void) {
     for (i = 0; i < BKBT_AP_TRAP_KINDS; i++) {
         bkbt_traps_applied[i] = 0;
     }
+    /* And the refills it applied */
+    for (i = 0; i < BKBT_AP_REFILL_KINDS; i++) {
+        bkbt_refills_applied[i] = 0;
+    }
 #endif
 }
 

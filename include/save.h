@@ -34,7 +34,10 @@ typedef struct{
     /* The traps of each kind played (bkbt_traps_applied; the link, include/bkbt.h), since the link's build: the
      * record grew from 0x120 to 0x130 bytes for them, with room for the next counts the hack has to keep */
     u8 traps_applied[BKBT_AP_TRAP_KINDS];   /* +0x118 */
-    u8 spare[15];                           /* +0x11D: 0. Named, so that the room left for the hack is visible */
+    /* The refills of each kind applied (bkbt_refills_applied, include/bkbt.h), since the refills' build: from the
+     * spare bytes, so the record stays 0x130 bytes and the link build's saves read 0, none applied */
+    u8 refills_applied[BKBT_AP_REFILL_KINDS]; /* +0x11D */
+    u8 spare[11];                           /* +0x121: 0. Named, so that the room left for the hack is visible */
 #endif
     u32 checksum;                           /* the last word: +0x12C in the hack build, +0x74 in retail */
 }SaveData;

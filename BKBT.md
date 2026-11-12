@@ -190,6 +190,10 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
     `src/core1/eeprom.c`, `src/core2/code_14420.c`, `src/core2/code_ABC00.c`, `src/core2/code_BEF20.c`, the save's
     load and `clearScoreStates`, `manual_syms.us.v10.txt`, and a world's exit pad, which Mumbo's sequence no longer
     arms (`src/core2/code_4C020.c`) ("The link: deaths, tags and traps, and infinite lives" below).
+25. **Refills** (2026-11-11, layout 0.16.0; `docs/ROADMAP.md` of the BKBT repository, the owner's next item 3): the
+    client gives refills of blue eggs, red feathers, gold feathers or the less full feather, and the game fills that
+    count to its cap, once each, the refills applied saved with the game. `include/bkbt.h`, `include/save.h`,
+    `src/core1/code_0.c`, the save's load and `clearScoreStates` ("Refills" below).
 
 ## The frame hook
 
@@ -381,7 +385,8 @@ repository, "The save device".
   Archipelago items and locations"), `u8 notes_collected[BKBT_AP_NOTE_BYTES]` at `+0x96..+0x112` ("Notes
   kept, and notes as Archipelago locations"), `u8 pad` at `+0x113`, `u32 link` at `+0x114..+0x117` (since
   2026-11-02, from the spare bytes, "The hub door"), `u8 traps_applied[BKBT_AP_TRAP_KINDS]` at `+0x118..+0x11C`
-  (since 2026-11-10, "The link: deaths, tags and traps, and infinite lives"), `u8 spare[15]` at `+0x11D..+0x12B`,
+  (since 2026-11-10, "The link: deaths, tags and traps, and infinite lives"), `u8 refills_applied[BKBT_AP_REFILL_KINDS]`
+  at `+0x11D..+0x120` (since 2026-11-11, from the spare bytes, "Refills"), `u8 spare[11]` at `+0x121..+0x12B`,
   0, kept for the hack, then the checksum at `+0x12C`: `0x130` bytes since 2026-11-10 (`0x120` from 2026-10-30,
   with `u8 spare[4]` at `+0x118` and the checksum at `+0x11C`; `0xA0` from 2026-10-29, with 6 spare bytes at
   `+0x96` and the checksum at `+0x9C`; `0x90` from 2026-10-26, with the checksum at `+0x8C`; retail `0x78`).
@@ -1426,7 +1431,7 @@ the costs stay retail's for now.
   the middle of its model (290 of its origin before it is drawn), fades out, sets its flag, despawns and
   sets off the jig (`:976-1004`); with too few notes door 2 and later make Grunty speak within 290 units
   (`:1029-1031`). Nothing marks a threshold reached; nothing else reads the door flags.
-- **The layout** (`include/bkbt.h:110-211`; layout 0.8.0, `BKBT_AP_VERSION_MINOR` 8): the items grow to 40
+- **The layout** (`include/bkbt.h:110-224`; layout 0.8.0, `BKBT_AP_VERSION_MINOR` 8): the items grow to 40
   bytes, `+0x18 u8 note_doors[BKBT_AP_NOTE_DOOR_SLOTS]` (13, indexed by the door's selector, `[0]` never
   set, not 0 = received) behind the padding byte `+0x17`, then 3 bytes of padding; the locations append
   `+0x10C u8 note_doors[13]` (the same index, not 0 = the door's threshold reached), then 3 bytes of
@@ -1978,6 +1983,44 @@ flags 4, let the A that turns its pages make Banjo jump. The owner's hand test o
 every step and found the third, the exit pad, which the check had not watched long enough to see; the fix passed
 there by hand the same day. Not checked: the forms' traps and deaths, a console.
 
+## Refills
+
+Done on 2026-11-11 (`docs/ROADMAP.md` of the BKBT repository, the owner's next item 3, the rest of hack feature 3),
+layout 0.16.0: the Archipelago filler of this game does something. The owner's decisions of that day: a refill fills
+its count to the most it holds, as the Lair's refill pillows do; the solo world draws the Blue Egg, Red Feather and
+Gold Feather Refills, no longer Extra Life (lives are infinite); in the combined slot Tooie's Egg Nest and Feather
+Nest go to the game being played when they arrive, once, and in this game an Egg Nest is a refill of blue eggs and a
+Feather Nest one of the less full feather.
+
+- **The items.** `bkbt_ap_items.refills[4]` at `+0x5C` (the items grew from 92 to 96 bytes): the refills of each kind
+  given to this game, in all, mod 256, which the client writes like the other totals. The kinds
+  (`BKBT_AP_REFILL_*`): blue eggs, red feathers, gold feathers, and the less full feather, red or gold, by its count
+  against its cap (red on a tie), which only the combined slot's Feather Nest gives.
+- **The refill.** `bkbt_apRefills` (`src/core1/code_0.c`, from `bkbt_frame` after the tokens), with the jiggies'
+  gates (`bkbt_file_chosen`, `bkbt_apItemsAllowed`, Banjo in the map and not dead): the first kind whose total is 1
+  to 127 ahead of `bkbt_refills_applied`, one kind per main-loop iteration, is filled the way the Lair's refill
+  pillows fill it (`src/lair/ch/refillpillow.c`: `item_setMaxCount`, which no header declares, is
+  `item_adjustByDiff(item, 9999999, FALSE)`, and `item_adjustByDiff` clamps the count to its cap: eggs 100, red
+  feathers 50, gold feathers 10, doubled once Cheato's flag for it is set, `FILEPROG_BE..C0`, `src/core2/
+  code_BEF20.c`), with the pillow's sound (`SFX_EGG_REFILL`, `SFX_RED_FEATHER_REFILL`, `SFX_GOLD_FEATHER_REFILL`)
+  and the counter counting up from the count (its number is set to the count first while it is off the screen, as
+  the jiggies' is); quietly while Mr. Vile's counter shows, as retail's pickups go (`src/core2/ch/collectible.c`).
+  Then the kind's applied count is the total. A refill while the count is full is spent all the same, and several
+  refills of a kind that come together fill once.
+- **Behind is nothing.** A total 128 or more behind the applied count, mod 256, is taken as behind and gives
+  nothing: the combined client writes 0 until it has read which game got which nest, and the counts wrap at 256.
+- **The save.** `bkbt_refills_applied` is saved at the record's `+0x11D` (`SaveData.refills_applied`, from the
+  spare bytes: the record stays `0x130` bytes), in the same call as the counts it filled (`__savedata_8033CA2C`
+  saves the eggs and feathers), loaded with the chosen game (`bkbt_saveData_loadAP`, `src/core2/code_B5040.c`) and
+  zeroed by `clearScoreStates` (`src/core2/code_956B0.c`): a refill applied is not applied again after a reload,
+  and a new file is filled once by the refills received before it. A save of the link's build reads 0 there, none
+  applied, so it carries over.
+
+Checked on mupen64plus with the BKBT repository's `tools/bk_refill_check.py` (each kind filled, the feather kind both
+ways, Cheato's caps, a refill spent while full, a lower total, and one remembered across a save, a reset and a
+reload), the clients' tests and the whole suite. The owner's hand test passed on ares v148 on 2026-11-11, every step,
+the combined slot's nests included. Not checked: Mr. Vile's quiet counter, a console.
+
 ## Rules for new code
 
 - **Hack code goes under `#if BKBT`**, so the matching build stays matching.
@@ -2006,7 +2049,7 @@ there by hand the same day. Not checked: the forms' traps and deaths, a console.
   with the goal of 2026-10-28, 64,528 with the Jinjos of 2026-10-29, 59,968 with the notes of 2026-10-30 and
   56,096 with the exit map of 2026-11-05 (lair ends at `0x803980E0`), 55,808 with the doors between the games of
   2026-11-07 (`0x80398200`), 53,056 with the link of 2026-11-10 (`0x80398CC0`) and 53,024 with its exit pad
-  (`0x80398CE0`):
+  (`0x80398CE0`) and 52,208 with the refills of 2026-11-11 (`0x80399010`):
   the largest, lair, ends at
   `0x80395840` in the maps of 2026-10-14 and 2026-10-15, at `0x80395890` in that of 2026-10-17, at
   `0x80395960` in that of the settings, at `0x80395AA0` in that of the items, at `0x80395B00` in that of
@@ -2059,7 +2102,9 @@ there by hand the same day. Not checked: the forms' traps and deaths, a console.
   transform checks read), and the game's own `bsStoredState` (`+8`, the form). Since the link of 2026-11-10
   `bkbt_ap_link` (the anchor check compares the anchor's `+0x1C` with it, the link check reads and writes it) and
   the game's own `stateTimerList` (the slide timer) and `badrone` (the drone's type), which the link check reads
-  with `D_80385F30` (the health and the lives). Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
+  with `D_80385F30` (the health and the lives). Since the refills of 2026-11-11 `bkbt_refills_applied` (an
+  initialised global), which the refill check reads with `bkbt_ap_items`, `D_80385F30` (the counts) and
+  `itemPrintValues`. Since the Mumbo tokens of that day `bkbt_tokens_given` and the game's own `sMumboTokenScore`
   and `D_803692F8` (the counters on the screen), which the token check reads (the seed check writes
   `sMumboTokenScore` to stand in for a pickup). Since the note doors of that day `bkbt_note_door_costs`,
   which the note-door check requires as the mark of a build with the note doors, and the game's own
@@ -2105,4 +2150,5 @@ there by hand the same day. Not checked: the forms' traps and deaths, a console.
     with the jiggies of 2026-10-27, fill from `0xFDA4B0`; 23,104 in that with the Mumbo tokens of that
     day, fill from `0xFDA5C0`; 22,848 in that with the note doors of that day, fill from `0xFDA6C0`; 18,848 in
     that with the exit map of 2026-11-05; 17,568 in that with the link of 2026-11-10, fill from `0xFDBB60`; 17,456 in
-    that with its exit pad, fill from `0xFDBBD0`).
+    that with its exit pad, fill from `0xFDBBD0`; 17,024 in that with the refills of 2026-11-11, fill from
+    `0xFDBD80`).
