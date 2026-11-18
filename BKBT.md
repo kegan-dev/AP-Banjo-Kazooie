@@ -202,7 +202,7 @@ place, so judge a build by `make`'s exit code or by the script, never by the ROM
 ## The frame hook
 
 With `BKBT=1` the game can hand the console back to Banjo-Tooie when it runs inside the dual-boot image of
-the BKBT repository. This is dual-boot contract **2**. The same ROM runs by itself: there it finds nothing
+the BKBT repository. This is dual-boot contract **5** ("The contract number" below). The same ROM runs by itself: there it finds nothing
 of what follows and is the plain game.
 
 Two functions in `src/core1/code_0.c` do it, with the layout in `include/bkbt.h`:
@@ -608,15 +608,17 @@ to, 0.9.0, Gruntilda beaten of 2026-10-28, which took a padding byte, 0.10.0, th
 2026-10-29, which grew the structs again, 0.11.0, the notes of 2026-10-30, which took padding bytes of the
 settings and the items and grew the locations, and 0.12.0, the Lair's cutscene of 2026-11-04, which took a padding
 byte of the settings; 28 bytes since the exit map of 2026-11-05, 0.13.0, "The exit map and the quick
-transform", and in 0.14.0, the doors between the games of 2026-11-07). An
+transform", and in 0.14.0, the doors between the games of 2026-11-07; 32 bytes since the link of 2026-11-10, 0.15.0,
+and in 0.16.0, the refills of 2026-11-11, which grew the items). An
 Archipelago
 client starts from that word: everything else it will read moves with every build, and the word does
 not. The Tooie hack publishes its own anchor in the same word, so a client sees which of the two games
 runs. There is no switch: every hack build, by itself and in the dual-boot image; the matching build has
 none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack feature 1).
 
-- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.14.0
-  since the doors between the games of 2026-11-07 (0.13.0 with the exit map of 2026-11-05, 0.12.0 with the Lair's cutscene of 2026-11-04, 0.11.0 with the notes of
+- **The layout** (`include/bkbt.h`), big-endian like everything the client reads, version 0.16.0
+  since the refills of 2026-11-11 (0.15.0 with the link of 2026-11-10, 0.14.0 with the doors between the games of
+  2026-11-07, 0.13.0 with the exit map of 2026-11-05, 0.12.0 with the Lair's cutscene of 2026-11-04, 0.11.0 with the notes of
   2026-10-30, 0.10.0 with the Jinjos of 2026-10-29, 0.2.0 with the settings of 2026-10-18, 0.3.0 with the items of
   that day, 0.4.0 with the molehills of 2026-10-22, 0.5.0 with the honeycombs of 2026-10-26, 0.6.0 with the
   jiggies of 2026-10-27, 0.7.0 with the Mumbo tokens of that day, 0.8.0 with the note doors of that day,
@@ -627,14 +629,15 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   | `+0x00` | `u32 magic` | `0x424B4150`, `'BKAP'` (`BKBT_AP_MAGIC`) |
   | `+0x04` | `u8 game_id` | 1, Banjo-Kazooie (`BKBT_AP_GAME_BK`; the Tooie hack would be 2) |
   | `+0x05` | `u8 padding` | 0 |
-  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 28 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 to 0.12.0, 28 from 0.13.0 on) |
+  | `+0x06` | `u16 size` | `sizeof(BkbtApAnchor)`, 32 (12 in 0.1.0, 16 in 0.2.0, 20 in 0.3.0, 24 from 0.4.0 to 0.12.0, 28 in 0.13.0 and 0.14.0, 32 from 0.15.0 on) |
   | `+0x08` | `u16 version_major` | 0 |
-  | `+0x0A` | `u8 version_minor` | 13 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0, 10 in 0.10.0, 11 in 0.11.0, 12 in 0.12.0) |
+  | `+0x0A` | `u8 version_minor` | 16 (1 in 0.1.0, 2 in 0.2.0, 3 in 0.3.0, 4 in 0.4.0, 5 in 0.5.0, 6 in 0.6.0, 7 in 0.7.0, 8 in 0.8.0, 9 in 0.9.0, 10 in 0.10.0, 11 in 0.11.0, 12 in 0.12.0, 13 in 0.13.0, 14 in 0.14.0, 15 in 0.15.0) |
   | `+0x0B` | `u8 version_patch` | 0 |
   | `+0x0C` | `BkbtApSettings *settings` | `&bkbt_ap_settings`, which the client writes (since 0.2.0; "The Archipelago settings") |
   | `+0x10` | `BkbtApItems *items` | `&bkbt_ap_items`, which the client writes (since 0.3.0; "The Archipelago items") |
   | `+0x14` | `BkbtApLocations *locations` | `&bkbt_ap_locations`, which the game writes and the client reads (since 0.4.0; "Molehills as Archipelago locations") |
   | `+0x18` | `BkbtApExits *exits` | `&bkbt_ap_exits`, which the client writes (since 0.13.0; "The exit map and the quick transform") |
+  | `+0x1C` | `BkbtApLink *link` | `&bkbt_ap_link`, which both write, each its own fields (since 0.15.0; "The link: deaths, tags and traps, and infinite lives") |
 
   The version is that of this layout, not of the Archipelago world. A client checks magic, `game_id` and
   version before it trusts anything else, and reads nothing at or past `size`. The version also says the
@@ -644,7 +647,8 @@ none of it. Done on 2026-10-17 (`docs/ROADMAP.md` of the BKBT repository, hack f
   0.9.0 took a padding byte of the locations (`+0x119`) and grew nothing, 0.10.0 grew the items to 92 and
   the locations to 336, 0.11.0 took the settings' `+0x05` and the items' `+0x5A..+0x5B` from their
   padding and grew the locations to 464, 0.12.0 took the settings' `+0x06`, 0.13.0 appended the exit map's
-  pointer to the anchor, and 0.14.0 grew nothing: the exit map's entries for Tooie are taken. Later features append
+  pointer to the anchor, 0.14.0 grew nothing: the exit map's entries for Tooie are taken, 0.15.0 appended the link's
+  pointer, and 0.16.0 grew the items to 96 bytes. Later features append
   their fields behind the 12 bytes of 0.1.0 (the settings pointer of hack feature 2 came first, in
   0.2.0, the items pointer of 3 second, in 0.3.0, and the locations pointer of 4 third, in 0.4.0; then
   traps, the rest of 4's flags, the dialog queue of 5, death link of 7, a destination for Phase 2; the exit

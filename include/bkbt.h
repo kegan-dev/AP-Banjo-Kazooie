@@ -7,7 +7,7 @@
 /* BKBT=1 only (BKBT.md). What this ROM shares with the dual-boot image it can be part of, and the hooks
  * the game calls. A ROM started by itself finds none of it and behaves like the plain game.
  *
- * The handoff block mirrors hack/bt/n64/src/dualboot.h in the BKBT repository (dual-boot contract 4):
+ * The handoff block mirrors n64/src/dualboot.h of the Tooie hack (hack/bt; dual-boot contract 5):
  * keep the two in step. The Tooie hack and its launcher own the layout. This side uses the ten words
  * below: it reads the token, the payload address, the destination and the links and zeroes them, counts
  * the countdown down, only reads the flags, and writes the destination and the link of its return.
